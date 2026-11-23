@@ -26,10 +26,9 @@ export default function Auth() {
 
   return (
     <div className="flex justify-center items-center h-screen bg-gray-50">
-      <div className="w-full max-w-md p-8 space-y-4 bg-white rounded-lg shadow-md">
+      <div className="w-full max-w-md p-8 space-y-4 bg-white rounded-lg shadow-md -mt-20">
         <div className="text-center">
           <h1 className="text-2xl font-bold">AsyncComm</h1>
-          <p className="text-gray-500 mt-2">Sign in via magic link with your email below</p>
         </div>
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
@@ -42,7 +41,7 @@ export default function Auth() {
             />
           </div>
           <Button className="w-full" disabled={loading}>
-            {loading ? 'Sending magic link...' : 'Send magic link'}
+            {loading ? 'Sending link...' : 'Send login link'}
           </Button>
         </form>
         {message && (
