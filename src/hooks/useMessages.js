@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { fetchMessage, fetchMessages, insertMessage, uploadChatMedia } from '../lib/api/messages'
-import { mergeMessages } from '../lib/messages'
+import { mergeCatchUp, mergeMessages } from '../lib/messages'
 
 const emptyRow = {
   content: '', media_type: 'text', media_path: null, media_mime: null,
@@ -24,13 +24,26 @@ export function useMessages(conversationId, userId) {
   const drafts = useRef(new Map()) // id -> { row, upload? } for retry
   const blobUrls = useRef(new Set())
   const merge = useCallback((rows) => setMessages((prev) => mergeMessages(prev, rows)), [])
+  const shown = useRef([]) // latest rendered list, readable from async callbacks
+  useEffect(() => { shown.current = messages })
 
   // ---- history + live updates ----
   const loadLatest = useCallback(async ({ initial }) => {
     try {
       const { messages: rows, hasMore: more } = await fetchMessages(conversationId)
-      merge(rows)
-      if (initial) { setHasMore(more); setStatus('ready'); setError('') }
+      if (initial) {
+        merge(rows)
+        setHasMore(more)
+        setStatus('ready')
+        setError('')
+      } else {
+        // Catching up after being away: make sure we don't leave a hole in the history.
+        // (functional update so a message queued in the same tick isn't lost; the flag only
+        //  depends on confirmed messages, which the snapshot has)
+        setMessages((prev) => mergeCatchUp(prev, rows, more).messages)
+        const { hasMore: gap } = mergeCatchUp(shown.current, rows, more)
+        if (gap !== null) setHasMore(gap)
+      }
     } catch (e) {
       if (initial) { setStatus('error'); setError(e.message) }
       else console.warn('catch-up failed', e)

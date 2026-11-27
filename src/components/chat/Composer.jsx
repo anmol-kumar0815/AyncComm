@@ -99,12 +99,11 @@ export default function Composer({ conversationId, disabled, onSendText, onPickI
   }
 
   const toggleEmoji = () => {
-    setEmojiOpen((open) => {
-      // On phones, hide the keyboard while the emoji panel is up; tapping the box brings it back.
-      if (!open && isTouchDevice()) areaRef.current?.blur()
-      else if (open) areaRef.current?.focus()
-      return !open
-    })
+    // On phones, hide the keyboard while the emoji panel is up (tapping the box brings it back);
+    // on desktop keep typing focus where it was.
+    if (emojiOpen) areaRef.current?.focus()
+    else if (isTouchDevice()) areaRef.current?.blur()
+    setEmojiOpen(!emojiOpen)
   }
 
   if (recorder.phase === 'recording') {

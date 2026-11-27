@@ -51,3 +51,25 @@ export function buildTimeline(messages) {
   })
   return out
 }
+
+/**
+ * Fold the freshly fetched newest page into what we already show.
+ *
+ * Normally that's a plain merge. But if we were away long enough that the
+ * newest page doesn't reach back to our newest known message (there's a hole
+ * between them), merging would show a conversation with missing messages and
+ * no way to fetch them. In that case we drop the stale history and keep only
+ * the new page (plus unsent local messages) so "Load earlier" fills the gap
+ * contiguously. Returns { messages, hasMore } where hasMore is set only when a
+ * gap was cut, otherwise null (leave the existing value alone).
+ */
+export function mergeCatchUp(existing, page, pageHasMore) {
+  const confirmed = existing.filter((m) => !m.pending && !m.failed)
+  const newestKnown = confirmed.at(-1)
+  const oldestInPage = page[0]
+  const hasGap =
+    pageHasMore && newestKnown && oldestInPage &&
+    new Date(oldestInPage.created_at) > new Date(newestKnown.created_at)
+  if (!hasGap) return { messages: mergeMessages(existing, page), hasMore: null }
+  return { messages: mergeMessages(existing.filter((m) => m.pending || m.failed), page), hasMore: true }
+}

@@ -197,6 +197,15 @@ describe('media', () => {
 })
 
 describe('reconnecting', () => {
+  it('never leaves a silent hole: after a long absence it shows the newest page and lets you load earlier', async () => {
+    const { result } = await setup([row('old', { created_at: '2026-01-01T09:00:00Z' })])
+    expect(result.current.hasMore).toBe(false)
+    fetchMessages.mockResolvedValueOnce({ messages: [row('new1', { created_at: '2026-01-02T09:00:00Z' }), row('new2', { created_at: '2026-01-02T09:01:00Z' })], hasMore: true })
+    await act(async () => { channel.subscribeCb('SUBSCRIBED') })
+    expect(result.current.messages.map((m) => m.id)).toEqual(['new1', 'new2'])
+    expect(result.current.hasMore).toBe(true)
+  })
+
   it('fetches what it missed when the realtime channel re-subscribes', async () => {
     await setup()
     expect(fetchMessages).toHaveBeenCalledTimes(1)

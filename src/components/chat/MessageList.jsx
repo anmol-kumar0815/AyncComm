@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown } from 'lucide-react'
 import MessageBubble from './MessageBubble'
 import { Button } from '../ui/button'
@@ -12,6 +12,7 @@ export default function MessageList({ messages, meId, friendName, status, error,
   const listRef = useRef(null)
   const snapshot = useRef({ firstId: null, lastId: null, scrollHeight: 0 })
   const [unseen, setUnseen] = useState(0)
+  const stickToBottom = useRef(true) // was the reader at the bottom before the last resize/scroll?
   const timeline = useMemo(() => buildTimeline(messages), [messages])
 
   // Scroll management: stick to the bottom for new messages (unless the reader
@@ -36,8 +37,19 @@ export default function MessageList({ messages, meId, friendName, status, error,
     snapshot.current = { firstId: first, lastId: last, scrollHeight: el.scrollHeight }
   }, [messages, meId])
 
+  // When the list gets shorter (emoji panel opens, phone keyboard appears) keep the latest
+  // messages visible instead of leaving them hidden below the fold.
+  useEffect(() => {
+    const el = listRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => { if (stickToBottom.current) el.scrollTop = el.scrollHeight })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   const onScroll = () => {
     const el = listRef.current
+    stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX
     if (unseen && el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX) setUnseen(0)
   }
   const jumpToLatest = () => {

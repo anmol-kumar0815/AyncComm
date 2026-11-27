@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mergeMessages, buildTimeline } from '../src/lib/messages.js'
+import { mergeMessages, buildTimeline, mergeCatchUp } from '../src/lib/messages.js'
 
 const msg = (id, iso, sender = 'a', extra = {}) => ({ id, created_at: iso, sender_id: sender, content: id, ...extra })
 
@@ -50,5 +50,38 @@ describe('buildTimeline', () => {
   })
   it('handles an empty list', () => {
     expect(buildTimeline([])).toEqual([])
+  })
+})
+
+describe('mergeCatchUp', () => {
+  const at = (n) => `2026-01-01T10:00:${String(n).padStart(2, '0')}Z`
+
+  it('is a plain merge when the new page overlaps what we have', () => {
+    const existing = [msg('1', at(1)), msg('2', at(2))]
+    const out = mergeCatchUp(existing, [msg('2', at(2)), msg('3', at(3))], true)
+    expect(out.messages.map((m) => m.id)).toEqual(['1', '2', '3'])
+    expect(out.hasMore).toBeNull() // leave "load earlier" as it was
+  })
+
+  it('is a plain merge when the whole conversation fits in the page', () => {
+    const out = mergeCatchUp([msg('1', at(1))], [msg('2', at(2))], false)
+    expect(out.messages.map((m) => m.id)).toEqual(['1', '2'])
+  })
+
+  it('drops stale history when the page does not reach back to it (we missed a lot)', () => {
+    const existing = [msg('old1', at(1)), msg('old2', at(2))]
+    const out = mergeCatchUp(existing, [msg('new1', at(50)), msg('new2', at(51))], true)
+    expect(out.messages.map((m) => m.id)).toEqual(['new1', 'new2']) // no silent hole
+    expect(out.hasMore).toBe(true) // "Load earlier" will fill it in order
+  })
+
+  it('keeps messages we are still sending or that failed, through a gap', () => {
+    const existing = [msg('old', at(1)), msg('mine', at(2), 'me', { pending: true }), msg('bad', at(3), 'me', { failed: true })]
+    const out = mergeCatchUp(existing, [msg('new', at(50))], true)
+    expect(out.messages.map((m) => m.id).sort()).toEqual(['bad', 'mine', 'new'])
+  })
+
+  it('works from an empty list', () => {
+    expect(mergeCatchUp([], [msg('1', at(1))], true).messages).toHaveLength(1)
   })
 })
