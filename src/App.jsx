@@ -1,7 +1,6 @@
 import { BrowserRouter } from 'react-router-dom'
 import { MessageCircle } from 'lucide-react'
 import AuthScreen from './components/auth/AuthScreen'
-import SetupScreen from './components/auth/SetupScreen'
 import MainLayout from './components/MainLayout'
 import { Button } from './components/ui/button'
 import { Spinner } from './components/ui/spinner'
@@ -56,8 +55,6 @@ function AuthGate() {
           <p>Check your connection, and make sure the database migrations in <code>migrations/</code> have been run.</p>
         </Notice>
       )
-    case 'needsSetup':
-      return <SetupScreen user={auth.user} profile={auth.profile} isRecovery={auth.isRecovery} onDone={auth.finishSetup} />
     default:
       return (
         <ChatsProvider userId={auth.user.id}>

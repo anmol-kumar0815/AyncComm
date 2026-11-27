@@ -7,25 +7,22 @@ import { fetchProfile } from '../lib/api/auth'
  *  loading      - restoring the stored session (and dev auto-login)
  *  signedOut    - show the sign-in screen
  *  profileError - signed in but the profile couldn't be loaded (retry / sign out)
- *  needsSetup   - first visit (or password reset): choose name + password
  *  ready        - show the app
  */
 export function useAuth() {
   const [booted, setBooted] = useState(false)
   const [session, setSession] = useState(null)
-  const [recovery, setRecovery] = useState(false)
   const [profile, setProfile] = useState(null)
   const [profileState, setProfileState] = useState('idle') // idle | loading | ready | error
   const userId = session?.user?.id ?? null
 
-  // 1. Restore the session (this also consumes a magic link in the URL), then
+  // 1. Restore the stored session, then
   //    let the dev shortcut sign in if there is none.
   useEffect(() => {
     let active = true
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, next) => {
       // Keep this callback synchronous: awaiting supabase calls in here can deadlock the client.
-      if (event === 'PASSWORD_RECOVERY') setRecovery(true)
-      if (event === 'SIGNED_OUT') { setRecovery(false); setProfile(null); setProfileState('idle') }
+      if (event === 'SIGNED_OUT') { setProfile(null); setProfileState('idle') }
       setSession(next)
     })
     ;(async () => {
@@ -64,17 +61,11 @@ export function useAuth() {
     if (userId) setProfile(await fetchProfile(userId))
   }, [userId])
 
-  const finishSetup = useCallback(async () => {
-    setRecovery(false)
-    if (userId) await loadProfile(userId)
-  }, [userId, loadProfile])
-
   let status
   if (!booted) status = 'loading'
   else if (!session) status = 'signedOut'
   else if (profileState === 'idle' || profileState === 'loading') status = 'loading'
   else if (profileState === 'error') status = 'profileError'
-  else if (recovery || !profile?.has_password) status = 'needsSetup'
   else status = 'ready'
 
   return {
@@ -82,8 +73,6 @@ export function useAuth() {
     session,
     user: session?.user ?? null,
     profile,
-    isRecovery: recovery,
-    finishSetup,
     refreshProfile,
     retryProfile: () => userId && loadProfile(userId),
   }

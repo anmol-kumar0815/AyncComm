@@ -94,6 +94,13 @@ describe('deleted messages in lists', () => {
   })
 })
 
+describe('friendlyError for existing accounts', () => {
+  it('tells someone signing up with a taken email to sign in instead', () => {
+    expect(friendlyError({ code: 'user_already_exists', message: 'User already registered' })).toMatch(/already exists.*sign in/i)
+    expect(friendlyError({ message: 'User already registered' })).toMatch(/already exists/i)
+  })
+})
+
 describe('friendlyError for closed signups', () => {
   it('explains that the app is invite-only instead of a vague failure', () => {
     expect(friendlyError({ code: 'signup_disabled', message: 'Signups not allowed for this instance' })).toMatch(/invite-only/)

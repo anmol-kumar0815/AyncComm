@@ -1,5 +1,5 @@
 // Development-only shortcut: sign in as a seeded user so you never have to go
-// through email links while building. Everything here is gated on
+// through the sign-in screen while building. Everything here is gated on
 // import.meta.env.DEV, which Vite replaces with `false` in production builds,
 // so this code (and the seeded credentials) is stripped from the shipped bundle.
 import { supabase } from './supabase'
@@ -57,19 +57,4 @@ export async function maybeDevLogin(session) {
 /** Dev-only: after a manual log out, stay logged out for the rest of this tab session. */
 export function rememberDevLogout() {
   if (import.meta.env.DEV) sessionStorage.setItem(OPT_OUT_KEY, '1')
-}
-
-/**
- * Dev-only: skip the email step for brand-new addresses by creating the account
- * directly. Works when "Confirm email" is OFF in Supabase (Auth -> Providers ->
- * Email); otherwise returns false and the caller falls back to the magic link.
- */
-export async function devSignUpWithoutEmail(email) {
-  if (!isDevLoginEnabled() || import.meta.env.VITE_DEV_SKIP_EMAIL === 'false') return false
-  const { data, error } = await supabase.auth.signUp({ email, password: crypto.randomUUID() })
-  if (error) {
-    console.warn('[dev login] signUp failed, falling back to magic link:', error.message)
-    return false
-  }
-  return Boolean(data.session)
 }

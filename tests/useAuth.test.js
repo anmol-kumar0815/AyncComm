@@ -18,7 +18,7 @@ import { useAuth } from '../src/hooks/useAuth.js'
 import { fetchProfile } from '../src/lib/api/auth'
 
 const session = (id = 'u1') => ({ user: { id, email: `${id}@example.com` } })
-const profile = (over = {}) => ({ id: 'u1', email: 'u1@example.com', display_name: 'Una', has_password: true, ...over })
+const profile = (over = {}) => ({ id: 'u1', email: 'u1@example.com', display_name: 'Una', ...over })
 
 beforeEach(() => { vi.clearAllMocks(); auth.session = null })
 
@@ -29,31 +29,11 @@ describe('useAuth status', () => {
     await waitFor(() => expect(result.current.status).toBe('signedOut'))
   })
 
-  it('ready for a returning user with a password', async () => {
+  it('ready for a signed-in user', async () => {
     auth.session = session(); fetchProfile.mockResolvedValue(profile())
     const { result } = renderHook(() => useAuth())
     await waitFor(() => expect(result.current.status).toBe('ready'))
     expect(result.current.user.id).toBe('u1')
-  })
-
-  it('needs setup after the first magic link (no password yet)', async () => {
-    auth.session = session(); fetchProfile.mockResolvedValue(profile({ has_password: false }))
-    const { result } = renderHook(() => useAuth())
-    await waitFor(() => expect(result.current.status).toBe('needsSetup'))
-    expect(result.current.isRecovery).toBe(false)
-  })
-
-  it('a password-recovery link forces the new-password screen even if a password exists', async () => {
-    auth.session = session(); fetchProfile.mockResolvedValue(profile())
-    const { result } = renderHook(() => useAuth())
-    await waitFor(() => expect(result.current.status).toBe('ready'))
-    act(() => auth.listener('PASSWORD_RECOVERY', session()))
-    expect(result.current.status).toBe('needsSetup')
-    expect(result.current.isRecovery).toBe(true)
-
-    await act(async () => { await result.current.finishSetup() })
-    await waitFor(() => expect(result.current.status).toBe('ready'))
-    expect(result.current.isRecovery).toBe(false)
   })
 
   it('signing in later (magic link / password) moves from signedOut to the right screen', async () => {
