@@ -34,7 +34,7 @@ npm run dev
 
 | Where | Setting |
 | --- | --- |
-| Authentication -> Providers -> Email | Turn **Confirm email OFF** (required: the app sends no emails, so sign-up must start a session immediately) and set the minimum password length to **8**. No SMTP / email provider is needed. |
+| Authentication -> Sign In / Providers -> Email | Make sure **Enable Email provider** is **ON** (otherwise sign-up and sign-in both fail with "Email signups are disabled"). Turn **Confirm email OFF** (required: the app sends no emails, so sign-up must start a session immediately) and set the minimum password length to **8**. No SMTP / email provider is needed. |
 | Project Settings -> API | Copy the URL and the `anon` key into `.env.local`. The anon key is public by design; Row Level Security is what protects data. Never put the `service_role` key in the frontend. |
 
 ## Sign-in flow
@@ -123,7 +123,7 @@ Voice notes need **HTTPS** (browsers only expose the microphone on secure origin
 Supabase is the backend only; the built app (`dist/`) goes on any static host.
 
 1. **New Supabase project for production** (keep dev separate). SQL Editor: run `migrations/001`-`006` in order. **Do not run `seed.sql`.**
-2. **Authentication -> Providers -> Email:** Confirm email **OFF**, minimum password length **8**. (No SMTP or email provider is needed.)
+2. **Authentication -> Sign In / Providers -> Email:** **Enable Email provider ON**, Confirm email **OFF**, minimum password length **8**. (No SMTP or email provider is needed.)
 3. **Host the frontend** (Vercel / Netlify / Cloudflare Pages): build command `npm run build`, output directory `dist`, environment variables `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from the *production* project (Project Settings -> API). Never set `service_role` anywhere in the frontend, and don't set any `VITE_DEV_*` variables.
 4. Open the live URL and run the manual QA checklist below.
 

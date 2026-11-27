@@ -120,6 +120,13 @@ describe('friendlyError for existing accounts', () => {
   })
 })
 
+describe('friendlyError when the Email provider is off in Supabase', () => {
+  it('says what to switch on instead of a vague failure (both sign-up and sign-in variants)', () => {
+    expect(friendlyError({ code: 'email_provider_disabled', message: 'Email signups are disabled' })).toMatch(/turn on the Email provider/)
+    expect(friendlyError({ message: 'Email logins are disabled' })).toMatch(/turn on the Email provider/)
+  })
+})
+
 describe('friendlyError for closed signups', () => {
   it('explains that the app is invite-only instead of a vague failure', () => {
     expect(friendlyError({ code: 'signup_disabled', message: 'Signups not allowed for this instance' })).toMatch(/invite-only/)
