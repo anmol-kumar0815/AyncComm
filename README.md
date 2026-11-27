@@ -20,7 +20,8 @@ Then, once per Supabase project, in **Dashboard -> SQL Editor** run, in order:
 3. `migrations/003_rls_and_storage.sql`
 4. `migrations/004_receipts_edit_delete_presence.sql`
 5. `migrations/005_delete_for_me.sql`
-6. `seed.sql` (development only: creates `dev_user@`, `alice@`, `bob@example.com`, password `password123`)
+6. `migrations/006_password_signup.sql`
+7. `seed.sql` (development only: creates `dev_user@`, `alice@`, `bob@example.com`, password `password123`)
 
 (Details and what each file does: [`migrations/README.md`](migrations/README.md). They are idempotent and
 upgrade an existing project in place.)
@@ -33,18 +34,30 @@ npm run dev
 
 | Where | Setting |
 | --- | --- |
-| Authentication -> URL Configuration | **Site URL** = your deployed URL; add **Redirect URLs** for every origin you use (`http://localhost:5173`, production). Magic links and password-reset links only work for allowed redirect URLs. |
-| Authentication -> Providers -> Email | Keep **Confirm email ON** in production. For development you can turn it **OFF** so new accounts skip the email step (see below). |
+| Authentication -> Providers -> Email | Turn **Confirm email OFF** (required: the app sends no emails, so sign-up must start a session immediately) and set the minimum password length to **8**. No SMTP / email provider is needed. |
 | Project Settings -> API | Copy the URL and the `anon` key into `.env.local`. The anon key is public by design; Row Level Security is what protects data. Never put the `service_role` key in the frontend. |
 
 ## Sign-in flow
 
-1. **First visit:** enter your email -> we email a link -> the link opens the app on a one-time screen
-   where you choose your **name and password**.
-2. **Next visits:** enter your email -> the app sees you have a password -> enter it. No email.
-3. **Forgot password:** one tap on the password step emails a reset link.
+The app never sends an email. Everything is email + password:
 
-The session is remembered by the browser, so you stay signed in between visits until you log out.
+1. Enter your email.
+2. **Already have an account?** Enter your password. **New here?** Enter your name and choose a password (at least 8
+   characters); your account is created and you're in.
+3. The browser remembers the session, so you stay signed in between visits until you log out.
+
+**No password reset by email.** If someone forgets their password, whoever runs the app resets it in the Supabase SQL
+Editor (and tells them the new one):
+
+```sql
+update auth.users
+set encrypted_password = crypt('NewPassword123', gen_salt('bf'))
+where lower(email) = 'person@example.com';
+```
+
+Anyone who can open the URL can create an account. They see nothing until someone accepts their friend request, but if you
+want a closed group, turn off **Authentication -> Sign In / Providers -> Allow new users to sign up** after everyone has joined
+(or create accounts yourself under Authentication -> Users, ticking *Auto Confirm User*).
 
 ## Development login (no emails, no re-typing)
 
@@ -56,7 +69,6 @@ The session is remembered by the browser, so you stay signed in between visits u
 | open `/?as=none` | see the real sign-in screen |
 | log out in the app | stay logged out for that tab until you open `/?as=...` or start a new tab |
 | `VITE_DEV_AUTO_LOGIN=false` in `.env.local` | turn auto-login off entirely |
-| turn **Confirm email** off in Supabase | typing a *new* email in dev creates the account instantly and goes straight to the name+password screen. (With it on, dev falls back to the normal magic link.) `VITE_DEV_SKIP_EMAIL=false` disables this shortcut. |
 
 All of this is behind `import.meta.env.DEV` and is **removed from production builds**. `tests/build.test.js`
 builds for real and fails if any seeded credential appears in the production bundle.
@@ -110,12 +122,10 @@ Voice notes need **HTTPS** (browsers only expose the microphone on secure origin
 
 Supabase is the backend only; the built app (`dist/`) goes on any static host.
 
-1. **New Supabase project for production** (keep dev separate). SQL Editor: run `migrations/001`-`005` in order. **Do not run `seed.sql`.**
-2. **Authentication -> URL Configuration:** Site URL = your production URL; add it to Redirect URLs.
-3. **Authentication -> Providers -> Email:** Confirm email **ON**. Set minimum password length to 8.
-4. **Authentication -> SMTP Settings:** configure a real SMTP provider (Resend, Brevo, SendGrid, ...). Supabase's built-in mailer is only for testing and is heavily rate-limited, so sign-in links won't reach users reliably without this.
-5. **Host the frontend** (Vercel / Netlify / Cloudflare Pages): build command `npm run build`, output directory `dist`, environment variables `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from the *production* project (Project Settings -> API). Never set `service_role` anywhere in the frontend, and don't set any `VITE_DEV_*` variables.
-6. Open the live URL and run the manual QA checklist below.
+1. **New Supabase project for production** (keep dev separate). SQL Editor: run `migrations/001`-`006` in order. **Do not run `seed.sql`.**
+2. **Authentication -> Providers -> Email:** Confirm email **OFF**, minimum password length **8**. (No SMTP or email provider is needed.)
+3. **Host the frontend** (Vercel / Netlify / Cloudflare Pages): build command `npm run build`, output directory `dist`, environment variables `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from the *production* project (Project Settings -> API). Never set `service_role` anywhere in the frontend, and don't set any `VITE_DEV_*` variables.
+4. Open the live URL and run the manual QA checklist below.
 
 Verify Row Level Security is on for every table (all rows must show `true`):
 
@@ -135,13 +145,14 @@ select tablename, rowsecurity from pg_tables where schemaname = 'public' order b
 | Production bundle contains no dev credentials | `tests/build.test.js` |
 
 What these **cannot** prove: real browser behaviour (layout, `MediaRecorder` output, audio playback, the
-camera/file picker, mobile keyboards) and the live Supabase service (Auth redirects, Realtime delivery,
+camera/file picker, mobile keyboards) and the live Supabase service (Auth, Realtime delivery,
 Storage). Use the checklist below after setting up a project.
 
 ## Manual QA checklist (real browser + real Supabase)
 
-- [ ] Sign up with a new email: link arrives, opens the app, name+password screen, then Chats. Reload: still signed in.
-- [ ] Log out, log back in with the password. Wrong password shows an error. "Forgot password" email arrives and works.
+- [ ] Sign up with a new email (name + password): you land in Chats straight away, no email. Reload: still signed in.
+- [ ] Log out, log back in with the password. A wrong password shows an error. Signing up again with the same email says the account exists.
+- [ ] Reset a password with the SQL in *Sign-in flow* and sign in with the new one.
 - [ ] Two browsers (`/?as=alice`, `/?as=bob` in incognito): messages appear live both ways; unread badge and tab title update; opening the chat clears them.
 - [ ] Send a photo (picker, paste, drag-drop): preview -> appears instantly -> still there after reload. Tap it for the viewer.
 - [ ] Voice note in Chrome **and Safari**: record, send, plays on the other side, seek and 1.5x work, mic indicator turns off afterwards. Deny mic permission: you get a clear message.
