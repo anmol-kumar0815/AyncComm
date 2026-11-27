@@ -12,7 +12,7 @@ import path from 'node:path'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const sql = (rel) => readFileSync(path.join(root, rel), 'utf8')
-const MIGRATIONS = ['001_schema', '002_functions', '003_rls_and_storage', '004_receipts_edit_delete_presence', '005_delete_for_me'].map((n) => `migrations/${n}.sql`)
+const MIGRATIONS = ['001_schema', '002_functions', '003_rls_and_storage', '004_receipts_edit_delete_presence', '005_delete_for_me', '006_password_signup'].map((n) => `migrations/${n}.sql`)
 
 const A = '00000000-0000-0000-0000-00000000000a'
 const B = '00000000-0000-0000-0000-00000000000b'
@@ -83,8 +83,8 @@ describe.each([
     await denied('select * from get_chat_list()')
     await denied(`select send_friend_request('bob@example.com')`)
     await denied('select * from messages')
-    await as(A, 'alice@example.com')
-    await q('update profiles set has_password = true where id = auth.uid()')
+    await admin()
+    await q(`update auth.users set encrypted_password = 'hashed-secret' where id = $1`, [A]) // what signUp does
     await anon()
     expect(await one(`select email_has_password('  ALICE@example.com ')`)).toBe(true)
     expect(await one(`select email_has_password('nobody@example.com')`)).toBe(false)
@@ -474,6 +474,45 @@ describe.each([
       await q('insert into message_hidden (message_id, user_id) values ($1, $2)', [id, B])
       await q('delete from messages where id = $1', [id])
       expect(await one('select count(*)::int from message_hidden where message_id = $1', [id])).toBe(0)
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // 006: password sign-up
+  // ---------------------------------------------------------------------------
+  describe('password sign-up', () => {
+    const E = '00000000-0000-0000-0000-0000000000e1'
+    const F = '00000000-0000-0000-0000-0000000000e2'
+
+    it('creates profiles with has_password = true for accounts that have a password, and false for passwordless ones', async () => {
+      await admin()
+      await db.query(`insert into auth.users (id, email, encrypted_password, raw_user_meta_data) values
+        ($1, 'Erin@Example.com', 'hash', '{"display_name":"Erin Q"}'), ($2, 'finn@example.com', null, '{}')`, [E, F])
+      expect(await q('select email, display_name, has_password from profiles where id = $1', [E])).toEqual([
+        { email: 'erin@example.com', display_name: 'Erin Q', has_password: true },
+      ])
+      expect((await q('select has_password from profiles where id = $1', [F]))[0].has_password).toBe(false)
+    })
+
+    it('tells the sign-in screen "sign in" for password accounts and "create account" for everything else', async () => {
+      await anon()
+      expect(await one(`select email_has_password(' ERIN@example.com ')`)).toBe(true)
+      expect(await one(`select email_has_password('finn@example.com')`)).toBe(false) // exists, but passwordless
+      expect(await one(`select email_has_password('nobody@example.com')`)).toBe(false)
+      expect(await one(`select email_has_password('')`)).toBe(false)
+    })
+
+    it('reveals nothing but a boolean: anonymous visitors still cannot read users or profiles', async () => {
+      await anon()
+      await denied('select * from profiles')
+      await denied('select email from auth.users')
+    })
+
+    it('does not depend on the has_password flag (it cannot drift)', async () => {
+      await admin()
+      await q('update profiles set has_password = false where id = $1', [E])
+      await anon()
+      expect(await one(`select email_has_password('erin@example.com')`)).toBe(true)
     })
   })
 })
