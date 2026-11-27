@@ -25,7 +25,7 @@ export default function ChatListPane({ user, profile, onProfileChanged }) {
 
   return (
     <div className="flex h-full flex-col bg-white">
-      <header className="flex items-center justify-between px-4 pb-2 pt-4 pt-safe">
+      <header className="flex items-center justify-between px-4 pb-2 [--pad-t:1rem] pt-safe">
         <h1 className="text-2xl font-bold tracking-tight">Chats</h1>
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon" onClick={() => setAdding(true)} aria-label="Add a friend">

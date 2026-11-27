@@ -113,7 +113,7 @@ export default function Composer({ conversationId, disabled, onSendText, onPickI
   return (
     <div className="bg-white">
       {emojiOpen && <EmojiPanel onPick={addEmoji} />}
-      <div className="flex items-end gap-1.5 border-t border-gray-200 px-2 py-2 pb-safe md:px-4">
+      <div className="flex items-end gap-1.5 border-t border-gray-200 px-2 pt-2 [--pad-b:0.5rem] pb-safe md:px-4">
         <Button
           variant="ghost"
           size="icon"

@@ -15,9 +15,11 @@
 }
 
 @layer utilities {
-  /* Respect the iPhone notch / home indicator. */
-  .pt-safe { padding-top: env(safe-area-inset-top); }
-  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+  /* Respect the iPhone notch / home indicator. These REPLACE the element's padding on that side
+     (they used to silently override the normal padding classes, leaving 0 padding on desktop), so state the normal
+     padding as a variable: class="[--pad-b:0.5rem] pb-safe" => at least 0.5rem, more if the inset is bigger. */
+  .pt-safe { padding-top: max(var(--pad-t, 0px), env(safe-area-inset-top)); }
+  .pb-safe { padding-bottom: max(var(--pad-b, 0px), env(safe-area-inset-bottom)); }
   .scrollbar-thin { scrollbar-width: thin; }
 }
 

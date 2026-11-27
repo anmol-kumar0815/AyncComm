@@ -18,10 +18,10 @@ export default function ImageLightbox({ image, onClose }) {
       onClick={(e) => { if (e.target === e.currentTarget || e.target.dataset.backdrop) onClose() }}
       className="fixed inset-0 m-0 h-dvh max-h-none w-dvw max-w-none bg-black/90 p-0 backdrop:bg-black"
     >
-      <div data-backdrop="1" className="flex h-full w-full items-center justify-center p-4 pt-safe pb-safe">
+      <div data-backdrop="1" className="flex h-full w-full items-center justify-center px-4 [--pad-t:1rem] [--pad-b:1rem] pt-safe pb-safe">
         <img src={image.url} alt={image.alt} className="max-h-full max-w-full rounded-lg object-contain" />
       </div>
-      <div className="absolute right-3 top-3 flex gap-2 pt-safe">
+      <div className="absolute right-3 top-[max(0.75rem,env(safe-area-inset-top))] flex gap-2">
         <a
           href={image.url}
           target="_blank"

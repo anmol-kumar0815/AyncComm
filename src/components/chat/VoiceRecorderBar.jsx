@@ -22,7 +22,7 @@ export default function VoiceRecorderBar({ elapsedMs, level, onCancel, onSend })
   const nearLimit = remaining < 15_000
 
   return (
-    <div className="flex items-center gap-2 border-t border-gray-200 bg-white px-2 py-2 pb-safe md:px-4" role="group" aria-label="Recording voice note">
+    <div className="flex items-center gap-2 border-t border-gray-200 bg-white px-2 pt-2 [--pad-b:0.5rem] pb-safe md:px-4" role="group" aria-label="Recording voice note">
       <Button variant="ghost" size="icon" onClick={onCancel} aria-label="Cancel recording" className="text-red-600 hover:bg-red-50">
         <Trash2 className="h-6 w-6" />
       </Button>

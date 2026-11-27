@@ -40,7 +40,7 @@ export default function ChatView({ meId }) {
   if (!friend) {
     return (
       <div className="flex h-full flex-col">
-        <div className="flex h-16 items-center border-b px-3 pt-safe">{back}</div>
+        <div className="flex min-h-16 items-center border-b px-3 pt-safe">{back}</div>
         <div className="flex flex-1 items-center justify-center px-6 text-center">
           {status === 'loading' ? <Spinner className="h-6 w-6" /> : (
             <div>
@@ -56,7 +56,7 @@ export default function ChatView({ meId }) {
 
   return (
     <div className="flex h-full flex-col bg-[#eaeef3]">
-      <header className="flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-3 pt-safe md:px-5">
+      <header className="flex min-h-16 shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-3 pt-safe md:px-5">
         {back}
         <Avatar name={friend.name} seed={friend.email} />
         <div className="min-w-0">

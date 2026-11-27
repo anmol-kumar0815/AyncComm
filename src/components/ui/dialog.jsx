@@ -40,7 +40,7 @@ export function Dialog({ open, onClose, title, children, className }) {
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="overflow-y-auto px-5 pb-5 pb-safe">{children}</div>
+        <div className="overflow-y-auto px-5 [--pad-b:1.25rem] pb-safe">{children}</div>
       </div>
     </dialog>
   )
