@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ImagePlus, Send, Smile, Keyboard } from 'lucide-react'
+import { ImagePlus, Mic, Send, Smile, Keyboard } from 'lucide-react'
 import { Button } from '../ui/button'
 import { cn } from '../../lib/utils'
 import EmojiPanel from './EmojiPanel'
+import VoiceRecorderBar from './VoiceRecorderBar'
+import { useToast } from '../ui/toast'
+import { useVoiceRecorder } from '../../hooks/useVoiceRecorder'
 import { insertAtCaret, MAX_MESSAGE_LENGTH, prepareText } from '../../lib/text'
 
 const drafts = new Map() // conversationId -> unsent text, so switching chats doesn't lose what you typed
 const MAX_HEIGHT = 140
 const isTouchDevice = () => window.matchMedia?.('(pointer: coarse)').matches
 
-export default function Composer({ conversationId, disabled, onSendText, onPickImage }) {
+export default function Composer({ conversationId, disabled, onSendText, onPickImage, onSendAudio }) {
+  const toast = useToast()
   const [text, setText] = useState(() => drafts.get(conversationId) ?? '')
   const [emojiOpen, setEmojiOpen] = useState(false)
   const areaRef = useRef(null)
@@ -37,6 +41,21 @@ export default function Composer({ conversationId, disabled, onSendText, onPickI
   }, [text])
 
   const canSend = prepareText(text) !== null && !disabled
+
+  const deliverRecording = useCallback((result) => {
+    if (!result) return
+    if (result.tooShort) toast.show('Voice note too short. Tap the microphone and keep talking.', 'info')
+    else onSendAudio(result)
+  }, [onSendAudio, toast])
+  const recorder = useVoiceRecorder({
+    onAutoStop: (result) => { deliverRecording(result); if (result?.blob) toast.show('Reached the 5 minute limit, so your voice note was sent.', 'success') },
+  })
+  const startRecording = async () => {
+    setEmojiOpen(false)
+    const r = await recorder.start()
+    if (!r.ok && r.error) toast.show(r.error)
+  }
+  const sendRecording = useCallback(async () => deliverRecording(await recorder.stop()), [deliverRecording, recorder])
 
   const send = useCallback(() => {
     const t = prepareText(textRef.current)
@@ -88,6 +107,10 @@ export default function Composer({ conversationId, disabled, onSendText, onPickI
     })
   }
 
+  if (recorder.phase === 'recording') {
+    return <VoiceRecorderBar elapsedMs={recorder.elapsedMs} level={recorder.level} onCancel={recorder.cancel} onSend={sendRecording} />
+  }
+
   return (
     <div className="bg-white">
       {emojiOpen && <EmojiPanel onPick={addEmoji} />}
@@ -126,9 +149,22 @@ export default function Composer({ conversationId, disabled, onSendText, onPickI
           )}
         />
 
-        <Button size="icon" onClick={send} disabled={!canSend} aria-label="Send message" className="rounded-full">
-          <Send className="h-5 w-5" />
-        </Button>
+        {/* One slot, two jobs: microphone while the box is empty, send once there's text. */}
+        {text.trim() ? (
+          <Button size="icon" onClick={send} disabled={!canSend} aria-label="Send message" className="rounded-full">
+            <Send className="h-5 w-5" />
+          </Button>
+        ) : (
+          <Button
+            size="icon"
+            onClick={startRecording}
+            disabled={disabled || recorder.phase === 'starting'}
+            aria-label="Record a voice note"
+            className="rounded-full"
+          >
+            <Mic className="h-5 w-5" />
+          </Button>
+        )}
       </div>
     </div>
   )

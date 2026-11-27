@@ -3,11 +3,12 @@ import { useState } from 'react'
 import { useMediaUrl } from '../../hooks/useMediaUrl'
 import { displaySize } from '../../lib/media'
 import { cn } from '../../lib/utils'
+import AudioPlayer from './AudioPlayer'
 
 /** Image or voice-note content of a message bubble. */
 export default function MessageMedia({ message, mine, onOpenImage }) {
   if (message.media_type === 'image') return <ImageContent message={message} onOpenImage={onOpenImage} />
-  return <p className={cn('px-2 py-1 text-sm italic opacity-80', mine && 'text-blue-50')}>🎤 Voice message</p>
+  return <AudioPlayer message={message} mine={mine} />
 }
 
 function ImageContent({ message, onOpenImage }) {

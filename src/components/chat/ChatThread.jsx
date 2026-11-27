@@ -67,7 +67,7 @@ export default function ChatThread({ conversationId, meId, friend }) {
         onDiscard={m.discard}
         onOpenImage={setLightbox}
       />
-      <Composer conversationId={conversationId} disabled={m.status !== 'ready'} onSendText={m.sendText} onPickImage={setPickedImage} />
+      <Composer conversationId={conversationId} disabled={m.status !== 'ready'} onSendText={m.sendText} onPickImage={setPickedImage} onSendAudio={m.sendAudio} />
 
       {dragging && (
         <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 border-4 border-dashed border-blue-400 bg-blue-50/90 text-blue-700">
