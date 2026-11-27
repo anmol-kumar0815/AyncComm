@@ -4,6 +4,9 @@ import MessageList from './MessageList'
 import Composer from './Composer'
 import ImageLightbox from './ImageLightbox'
 import ImagePreviewDialog from './ImagePreviewDialog'
+import ChatHeader from './ChatHeader'
+import MessageActionsDialog from './MessageActionsDialog'
+import { useToast } from '../ui/toast'
 import { useMessages } from '../../hooks/useMessages'
 import { useChats } from '../../hooks/chatsContext'
 import { useIsVisible } from '../../hooks/useVisibility'
@@ -14,6 +17,9 @@ export default function ChatThread({ conversationId, meId, friend }) {
   const { setActiveConversation, markReadLocal } = useChats()
   const visible = useIsVisible()
   const m = useMessages(conversationId, meId)
+  const toast = useToast()
+  const [actionsId, setActionsId] = useState(null) // message whose options dialog is open
+  const [editingId, setEditingId] = useState(null)
   const [pickedImage, setPickedImage] = useState(null)
   const [lightbox, setLightbox] = useState(null)
   const [dragging, setDragging] = useState(false)
@@ -36,6 +42,16 @@ export default function ChatThread({ conversationId, meId, friend }) {
     return () => clearTimeout(t)
   }, [needsRead, lastIncomingId, conversationId, markReadLocal])
 
+  const actionsMessage = actionsId ? m.messages.find((x) => x.id === actionsId) : null
+  const editingMessage = editingId ? m.messages.find((x) => x.id === editingId) : null
+  const editing = editingMessage && !editingMessage.deleted_at ? { id: editingMessage.id, content: editingMessage.content } : null
+
+  const saveEdit = (id, text) => {
+    setEditingId(null)
+    m.editMessage(id, text).catch((e) => toast.show(e.message))
+  }
+  const removeMessage = (id) => m.deleteMessage(id).catch((e) => toast.show(e.message))
+
   const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files')
   const dropHandlers = {
     onDragEnter: (e) => { if (hasFiles(e)) { dragDepth.current += 1; setDragging(true) } },
@@ -52,6 +68,8 @@ export default function ChatThread({ conversationId, meId, friend }) {
   }
 
   return (
+    <>
+    <ChatHeader friend={friend} typing={m.friendTyping} />
     <div className="relative flex min-h-0 flex-1 flex-col" {...dropHandlers}>
       <MessageList
         messages={m.messages}
@@ -66,8 +84,20 @@ export default function ChatThread({ conversationId, meId, friend }) {
         onRetry={m.retry}
         onDiscard={m.discard}
         onOpenImage={setLightbox}
+        onOpenActions={setActionsId}
       />
-      <Composer conversationId={conversationId} disabled={m.status !== 'ready'} onSendText={m.sendText} onPickImage={setPickedImage} onSendAudio={m.sendAudio} />
+      <Composer
+        key={editing ? `edit-${editing.id}` : 'compose'}
+        conversationId={conversationId}
+        disabled={m.status !== 'ready'}
+        onSendText={m.sendText}
+        onPickImage={setPickedImage}
+        onSendAudio={m.sendAudio}
+        onTyping={m.notifyTyping}
+        editing={editing}
+        onSaveEdit={saveEdit}
+        onCancelEdit={() => setEditingId(null)}
+      />
 
       {dragging && (
         <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 border-4 border-dashed border-blue-400 bg-blue-50/90 text-blue-700">
@@ -85,6 +115,19 @@ export default function ChatThread({ conversationId, meId, friend }) {
         />
       )}
       <ImageLightbox image={lightbox} onClose={() => setLightbox(null)} />
+
+      {actionsMessage && (
+        <MessageActionsDialog
+          key={actionsMessage.id}
+          message={actionsMessage}
+          meId={meId}
+          friendName={friend.name}
+          onClose={() => setActionsId(null)}
+          onEdit={setEditingId}
+          onDelete={removeMessage}
+        />
+      )}
     </div>
+    </>
   )
 }

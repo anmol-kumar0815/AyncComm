@@ -26,7 +26,7 @@ const at = (minsAgo) => new Date(Date.now() - minsAgo * 60_000).toISOString()
 
 let ctx
 const mount = (over = {}) => {
-  ctx = { chats: [], requests: [], status: 'ready', error: null, refresh: vi.fn(), acceptRequest: vi.fn(async () => {}), declineRequest: vi.fn(async () => {}), ...over }
+  ctx = { chats: [], requests: [], status: 'ready', error: null, onlineIds: new Set(), wentOffline: {}, refresh: vi.fn(), acceptRequest: vi.fn(async () => {}), declineRequest: vi.fn(async () => {}), ...over }
   return render(
     <MemoryRouter>
       <ToastProvider>
@@ -63,6 +63,17 @@ describe('chat list', () => {
     expect(within(screen.getByRole('link', { name: /Bob/ })).getByText('You: 🎤 Voice message (0:07)')).toBeInTheDocument()
     expect(within(screen.getByRole('link', { name: /Cara/ })).getByText('📷 Photo')).toBeInTheDocument()
     expect(within(screen.getByRole('link', { name: /Bob/ })).queryByLabelText(/unread/)).not.toBeInTheDocument()
+  })
+
+  it('puts a green dot on friends who are online right now, and only them', () => {
+    mount({ chats: [chat('Alice'), chat('Bob')], onlineIds: new Set(['alice']) })
+    expect(within(screen.getByRole('link', { name: /Alice/ })).getByRole('img', { name: 'Online' })).toBeInTheDocument()
+    expect(within(screen.getByRole('link', { name: /Bob/ })).queryByRole('img', { name: 'Online' })).not.toBeInTheDocument()
+  })
+
+  it('shows a deleted last message as deleted, not its old text', () => {
+    mount({ chats: [chat('Alice', { last: { id: 'm', type: 'text', content: null, senderId: 'alice', at: at(1), deleted: true } })] })
+    expect(within(screen.getByRole('link', { name: /Alice/ })).getByText('🚫 This message was deleted')).toBeInTheDocument()
   })
 
   it('caps huge unread counts', () => {

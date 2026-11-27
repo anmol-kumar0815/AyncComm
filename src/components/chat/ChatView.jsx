@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import { Avatar } from '../ui/avatar'
+import ChatHeader from './ChatHeader'
 import { Button } from '../ui/button'
 import { Spinner } from '../ui/spinner'
 import ChatThread from './ChatThread'
@@ -56,24 +56,20 @@ export default function ChatView({ meId }) {
 
   return (
     <div className="flex h-full flex-col bg-[#eaeef3]">
-      <header className="flex min-h-16 shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-3 pt-safe md:px-5">
-        {back}
-        <Avatar name={friend.name} seed={friend.email} />
-        <div className="min-w-0">
-          <h1 className="truncate text-[16px] font-semibold leading-tight">{friend.name}</h1>
-          <p className="truncate text-xs text-gray-500">{friend.email}</p>
-        </div>
-      </header>
-
       {conversationId ? (
         <ChatThread key={conversationId} conversationId={conversationId} meId={meId} friend={friend} />
-      ) : createError ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-          <p className="text-gray-600">{createError}</p>
-          <Button variant="outline" onClick={() => { setCreated({ friendId: null, id: null, error: null }); setAttempt((n) => n + 1) }}>Try again</Button>
-        </div>
       ) : (
-        <div className="flex flex-1 items-center justify-center"><Spinner className="h-6 w-6" /></div>
+        <>
+          <ChatHeader friend={friend} />
+          {createError ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+              <p className="text-gray-600">{createError}</p>
+              <Button variant="outline" onClick={() => { setCreated({ friendId: null, id: null, error: null }); setAttempt((n) => n + 1) }}>Try again</Button>
+            </div>
+          ) : (
+            <div className="flex flex-1 items-center justify-center"><Spinner className="h-6 w-6" /></div>
+          )}
+        </>
       )}
     </div>
   )

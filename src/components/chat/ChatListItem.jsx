@@ -1,10 +1,12 @@
 import { NavLink } from 'react-router-dom'
 import { Avatar } from '../ui/avatar'
+import { useChats } from '../../hooks/chatsContext'
 import { cn } from '../../lib/utils'
 import { formatListTime, messagePreview } from '../../lib/format'
 
 export default function ChatListItem({ chat, meId }) {
   const { last, unread } = chat
+  const { onlineIds } = useChats()
   const preview = last ? `${last.senderId === meId ? 'You: ' : ''}${messagePreview(last)}` : 'Say hi 👋'
   return (
     <NavLink
@@ -16,7 +18,7 @@ export default function ChatListItem({ chat, meId }) {
         )
       }
     >
-      <Avatar name={chat.name} seed={chat.email} size="lg" />
+      <Avatar name={chat.name} seed={chat.email} size="lg" online={onlineIds.has(chat.friendId)} />
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
           <span className={cn('truncate text-[16px] text-gray-900', unread ? 'font-semibold' : 'font-medium')}>{chat.name}</span>

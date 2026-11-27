@@ -8,7 +8,7 @@ import { formatDayLabel } from '../../lib/format'
 
 const NEAR_BOTTOM_PX = 160
 
-export default function MessageList({ messages, meId, friendName, status, error, hasMore, loadingMore, onLoadEarlier, onReload, onRetry, onDiscard, onOpenImage }) {
+export default function MessageList({ messages, meId, friendName, status, error, hasMore, loadingMore, onLoadEarlier, onReload, onRetry, onDiscard, onOpenImage, onOpenActions }) {
   const listRef = useRef(null)
   const snapshot = useRef({ firstId: null, lastId: null, scrollHeight: 0 })
   const [unseen, setUnseen] = useState(0)
@@ -100,6 +100,7 @@ export default function MessageList({ messages, meId, friendName, status, error,
               onRetry={onRetry}
               onDiscard={onDiscard}
               onOpenImage={onOpenImage}
+              onOpenActions={onOpenActions}
             />
           ),
         )}

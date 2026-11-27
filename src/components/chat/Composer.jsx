@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ImagePlus, Mic, Send, Smile, Keyboard } from 'lucide-react'
+import { Check, ImagePlus, Mic, Pencil, Send, Smile, Keyboard, X } from 'lucide-react'
 import { Button } from '../ui/button'
 import { cn } from '../../lib/utils'
 import EmojiPanel from './EmojiPanel'
@@ -10,11 +10,19 @@ import { insertAtCaret, MAX_MESSAGE_LENGTH, prepareText } from '../../lib/text'
 
 const drafts = new Map() // conversationId -> unsent text, so switching chats doesn't lose what you typed
 const MAX_HEIGHT = 140
+const TYPING_RESEND_MS = 3000 // while someone keeps typing, tell the other side at most this often
 const isTouchDevice = () => window.matchMedia?.('(pointer: coarse)').matches
 
-export default function Composer({ conversationId, disabled, onSendText, onPickImage, onSendAudio }) {
+/**
+ * `editing` ({ id, content }) switches the box into "edit this message" mode: pre-filled, Enter saves,
+ * Esc cancels, no photo/voice buttons. The parent remounts us (key) when that changes, so normal
+ * drafts are untouched by an edit.
+ */
+export default function Composer({ conversationId, disabled, onSendText, onPickImage, onSendAudio, onTyping, editing = null, onSaveEdit, onCancelEdit }) {
   const toast = useToast()
-  const [text, setText] = useState(() => drafts.get(conversationId) ?? '')
+  const isEditing = Boolean(editing)
+  const [text, setText] = useState(() => (editing ? editing.content : drafts.get(conversationId) ?? ''))
+  const typingSentAt = useRef(0)
   const [emojiOpen, setEmojiOpen] = useState(false)
   const areaRef = useRef(null)
   const fileRef = useRef(null)
@@ -24,13 +32,14 @@ export default function Composer({ conversationId, disabled, onSendText, onPickI
     textRef.current = text
   }, [text])
   useEffect(() => {
+    if (isEditing) return // an edit in progress is not a draft
     const id = conversationId
     return () => {
       const t = textRef.current
       if (t.trim()) drafts.set(id, t)
       else drafts.delete(id)
     }
-  }, [conversationId])
+  }, [conversationId, isEditing])
 
   // Grow with the content up to ~5 lines, then scroll.
   useEffect(() => {
@@ -57,21 +66,48 @@ export default function Composer({ conversationId, disabled, onSendText, onPickI
   }
   const sendRecording = useCallback(async () => deliverRecording(await recorder.stop()), [deliverRecording, recorder])
 
+  const stopTyping = useCallback(() => {
+    if (typingSentAt.current) { typingSentAt.current = 0; onTyping?.(false) }
+  }, [onTyping])
+
   const send = useCallback(() => {
     const t = prepareText(textRef.current)
     if (!t || disabled) return
+    if (editing) {
+      if (t === editing.content) onCancelEdit() // nothing changed: just leave edit mode
+      else onSaveEdit(editing.id, t)
+      return
+    }
     onSendText(t)
+    stopTyping()
     setText('')
     setEmojiOpen(false)
     areaRef.current?.focus()
-  }, [disabled, onSendText])
+  }, [disabled, onSendText, editing, onSaveEdit, onCancelEdit, stopTyping])
 
   const onKeyDown = (e) => {
-    if (e.key === 'Escape' && emojiOpen) { setEmojiOpen(false); return }
+    if (e.key === 'Escape') {
+      if (emojiOpen) setEmojiOpen(false)
+      else if (isEditing) onCancelEdit()
+      return
+    }
     // Enter sends on desktop; on phones Enter is a newline (there's a Send button).
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !isTouchDevice()) {
       e.preventDefault()
       send()
+    }
+  }
+
+  // Typing indicator: "typing" at most every few seconds while there is text, "stopped" when the box empties.
+  const onChange = (e) => {
+    const value = e.target.value
+    setText(value)
+    if (isEditing || !onTyping) return
+    if (value.trim()) {
+      const now = Date.now()
+      if (now - typingSentAt.current > TYPING_RESEND_MS) { typingSentAt.current = now; onTyping(true) }
+    } else {
+      stopTyping()
     }
   }
 
@@ -113,6 +149,15 @@ export default function Composer({ conversationId, disabled, onSendText, onPickI
   return (
     <div className="bg-white">
       {emojiOpen && <EmojiPanel onPick={addEmoji} />}
+      {isEditing && (
+        <div className="flex items-center gap-2 border-t border-blue-100 bg-blue-50 px-4 py-2 text-sm text-blue-900">
+          <Pencil className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="flex-1 font-medium">Editing message</span>
+          <button type="button" onClick={onCancelEdit} aria-label="Cancel editing" className="rounded-full p-1 hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       <div className="flex items-end gap-1.5 border-t border-gray-200 px-2 pt-2 [--pad-b:0.5rem] pb-safe md:px-4">
         <Button
           variant="ghost"
@@ -125,22 +170,27 @@ export default function Composer({ conversationId, disabled, onSendText, onPickI
           {emojiOpen ? <Keyboard className="h-6 w-6" /> : <Smile className="h-6 w-6" />}
         </Button>
 
-        <Button variant="ghost" size="icon" disabled={disabled} onClick={() => fileRef.current?.click()} aria-label="Send a photo" className="text-gray-500">
-          <ImagePlus className="h-6 w-6" />
-        </Button>
-        <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={onFileChosen} />
+        {!isEditing && (
+          <>
+            <Button variant="ghost" size="icon" disabled={disabled} onClick={() => fileRef.current?.click()} aria-label="Send a photo" className="text-gray-500">
+              <ImagePlus className="h-6 w-6" />
+            </Button>
+            <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={onFileChosen} />
+          </>
+        )}
 
         <textarea
           ref={areaRef}
           value={text}
           rows={1}
           maxLength={MAX_MESSAGE_LENGTH}
-          onChange={(e) => setText(e.target.value)}
+          onChange={onChange}
+          autoFocus={isEditing}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
           onFocus={() => { if (isTouchDevice()) setEmojiOpen(false) }}
-          placeholder="Type a message"
-          aria-label="Message"
+          placeholder={isEditing ? 'Edit your message' : 'Type a message'}
+          aria-label={isEditing ? 'Edit message' : 'Message'}
           enterKeyHint="enter"
           className={cn(
             'min-h-11 flex-1 resize-none rounded-3xl bg-gray-100 px-4 py-[10px] text-base leading-6 text-gray-900',
@@ -149,7 +199,11 @@ export default function Composer({ conversationId, disabled, onSendText, onPickI
         />
 
         {/* One slot, two jobs: microphone while the box is empty, send once there's text. */}
-        {text.trim() ? (
+        {isEditing ? (
+          <Button size="icon" onClick={send} disabled={!canSend} aria-label="Save changes" className="rounded-full">
+            <Check className="h-5 w-5" />
+          </Button>
+        ) : text.trim() ? (
           <Button size="icon" onClick={send} disabled={!canSend} aria-label="Send message" className="rounded-full">
             <Send className="h-5 w-5" />
           </Button>
