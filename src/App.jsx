@@ -61,7 +61,7 @@ function AuthGate() {
     default:
       return (
         <ChatsProvider userId={auth.user.id}>
-          <MainLayout user={auth.user} profile={auth.profile} onProfileChanged={auth.retryProfile} />
+          <MainLayout user={auth.user} profile={auth.profile} onProfileChanged={auth.refreshProfile} />
         </ChatsProvider>
       )
   }

@@ -59,6 +59,11 @@ export function useAuth() {
     loadProfile(userId) // eslint-disable-line react-hooks/set-state-in-effect -- fetching external data on user change
   }, [userId, loadProfile])
 
+  // Re-read the profile without going back to the loading screen (used after renaming yourself).
+  const refreshProfile = useCallback(async () => {
+    if (userId) setProfile(await fetchProfile(userId))
+  }, [userId])
+
   const finishSetup = useCallback(async () => {
     setRecovery(false)
     if (userId) await loadProfile(userId)
@@ -79,6 +84,7 @@ export function useAuth() {
     profile,
     isRecovery: recovery,
     finishSetup,
+    refreshProfile,
     retryProfile: () => userId && loadProfile(userId),
   }
 }
