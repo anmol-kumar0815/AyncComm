@@ -1,10 +1,16 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const url = import.meta.env.VITE_SUPABASE_URL
+const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-// Create a dummy client if keys aren't set yet so the app doesn't crash on boot
+/** False when .env.local is missing; App shows a setup screen instead of failing on every request. */
+export const isSupabaseConfigured = Boolean(url && anonKey)
+
 export const supabase = createClient(
-  supabaseUrl || 'https://placeholder-project.supabase.co',
-  supabaseAnonKey || 'placeholder-key'
+  url || 'https://placeholder-project.supabase.co',
+  anonKey || 'placeholder-key',
+  {
+    // Messages arrive in bursts; keep the realtime client from throttling them.
+    realtime: { params: { eventsPerSecond: 20 } },
+  },
 )
