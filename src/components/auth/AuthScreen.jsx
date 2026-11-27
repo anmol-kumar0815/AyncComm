@@ -41,9 +41,10 @@ export default function AuthScreen() {
     try { await fn() } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
 
-  const sendLink = async (kind) => {
-    if (kind === 'reset') await sendPasswordReset(email)
-    else await sendMagicLink(email)
+  // `to` is explicit because right after submit, the `email` state still holds the un-normalised input.
+  const sendLink = async (kind, to = email) => {
+    if (kind === 'reset') await sendPasswordReset(to)
+    else await sendMagicLink(to)
     setSentKind(kind)
     setCooldown(RESEND_SECONDS)
     setStep('sent')
@@ -60,7 +61,7 @@ export default function AuthScreen() {
         // Dev only: skip the email step by creating the account directly (see lib/devLogin.js).
         // On success we're signed in and the app moves on by itself.
         if (import.meta.env.DEV && (await (await import('../../lib/devLogin')).devSignUpWithoutEmail(clean))) return
-        await sendLink('signup')
+        await sendLink('signup', clean)
       }
     })
   }
