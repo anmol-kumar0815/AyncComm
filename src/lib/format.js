@@ -4,8 +4,9 @@ const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
 const DAY = 24 * 60 * 60 * 1000
 const dayDiff = (a, b) => Math.round((startOfDay(b) - startOfDay(a)) / DAY)
 
+/** 12-hour clock, e.g. "2:05 PM". Every time shown in the app goes through here. */
 export function formatClock(date, locale) {
-  return new Date(date).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+  return new Date(date).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit', hour12: true })
 }
 
 /** Right-hand timestamp in the chat list: 14:05 / Yesterday / Mon / 24/11/2026 */

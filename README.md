@@ -95,7 +95,7 @@ builds for real and fails if any seeded credential appears in the production bun
   - **Delete for me** (any message, including the other person's and "deleted" placeholders): it disappears from your
     chat only; the other person keeps it. It stays gone after reloading and on your other tabs/devices.
   Edited messages are marked "edited".
-- **Status line** under the name: `typing…`, `online`, or `last seen today at 14:05`. A green dot marks online friends.
+- **Status line** under the name: `typing…`, `online`, or `last seen today at 2:05 PM`. A green dot marks online friends.
 
 ### App lock (optional)
 

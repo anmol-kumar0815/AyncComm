@@ -5,6 +5,7 @@ import { applyMessageUpdate } from '../src/lib/chatList.js'
 import { friendlyError } from '../src/lib/api/errors.js'
 
 const now = new Date(2026, 10, 27, 15, 0).getTime()
+const t = (s) => s.replace(/\s+/g, ' ').toLowerCase() // AM/PM casing and spacing vary by ICU version
 const msg = (over = {}) => ({ id: 'm', sender_id: 'me', media_type: 'text', created_at: new Date(now - 60_000).toISOString(), ...over })
 
 describe('receiptState', () => {
@@ -55,9 +56,9 @@ describe('last seen and presence text', () => {
   const at = (...a) => new Date(...a)
   const n = at(2026, 10, 27, 15, 0)
   it('formats today, yesterday, this week and older', () => {
-    expect(formatLastSeen(at(2026, 10, 27, 9, 5), n, 'en-GB')).toBe('last seen today at 09:05')
-    expect(formatLastSeen(at(2026, 10, 26, 23, 59), n, 'en-GB')).toBe('last seen yesterday at 23:59')
-    expect(formatLastSeen(at(2026, 10, 24, 8, 0), n, 'en-GB')).toBe('last seen Tue at 08:00')
+    expect(t(formatLastSeen(at(2026, 10, 27, 9, 5), n, 'en-GB'))).toBe('last seen today at 9:05 am')
+    expect(t(formatLastSeen(at(2026, 10, 26, 23, 59), n, 'en-GB'))).toBe('last seen yesterday at 11:59 pm')
+    expect(t(formatLastSeen(at(2026, 10, 24, 8, 0), n, 'en-GB'))).toBe('last seen tue at 8:00 am')
     expect(formatLastSeen(at(2026, 9, 1, 8, 0), n, 'en-GB')).toBe('last seen 01/10/2026')
   })
   it('says nothing when it was never seen', () => {
@@ -67,11 +68,13 @@ describe('last seen and presence text', () => {
     const lastSeenAt = at(2026, 10, 27, 9, 5)
     expect(presenceLabel({ typing: true, online: true, lastSeenAt }, n)).toEqual({ text: 'typing…', tone: 'typing' })
     expect(presenceLabel({ typing: false, online: true, lastSeenAt }, n)).toEqual({ text: 'online', tone: 'online' })
-    expect(presenceLabel({ lastSeenAt }, n, 'en-GB')).toEqual({ text: 'last seen today at 09:05', tone: 'muted' })
+    const away = presenceLabel({ lastSeenAt }, n, 'en-GB')
+    expect(away.tone).toBe('muted')
+    expect(t(away.text)).toBe('last seen today at 9:05 am')
   })
   it('formats exact moments for message info', () => {
-    expect(formatDateTime(at(2026, 10, 27, 14, 5), n, 'en-GB')).toBe('Today at 14:05')
-    expect(formatDateTime(at(2026, 10, 26, 14, 5), n, 'en-GB')).toBe('Yesterday at 14:05')
+    expect(t(formatDateTime(at(2026, 10, 27, 14, 5), n, 'en-GB'))).toBe('today at 2:05 pm')
+    expect(t(formatDateTime(at(2026, 10, 26, 14, 5), n, 'en-GB'))).toBe('yesterday at 2:05 pm')
   })
 })
 

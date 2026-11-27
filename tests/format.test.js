@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { formatListTime, formatDayLabel, formatDuration, initials, emojiOnlyCount, isBigEmoji, messagePreview, avatarColor } from '../src/lib/format.js'
+import { formatClock, formatListTime, formatDayLabel, formatDuration, initials, emojiOnlyCount, isBigEmoji, messagePreview, avatarColor } from '../src/lib/format.js'
 
-const now = new Date(2026, 10, 27, 15, 0) // Fri 27 Nov 2026, 15:00 local
+const now = new Date(2026, 10, 27, 15, 0) // Fri 27 Nov 2026, 3:00 PM local
+// AM/PM casing and the space before it vary by locale/ICU version (newer ICU uses a narrow no-break space)
+const t = (s) => s.replace(/\s+/g, ' ').toLowerCase()
 
 describe('formatDuration', () => {
   it.each([[0, '0:00'], [4200, '0:04'], [4600, '0:05'], [65000, '1:05'], [600000, '10:00'], [undefined, '0:00'], [-5, '0:00']])('%s -> %s', (ms, out) => {
@@ -9,9 +11,25 @@ describe('formatDuration', () => {
   })
 })
 
+describe('formatClock: 12-hour everywhere', () => {
+  const at = (h, m) => new Date(2026, 10, 27, h, m)
+  it.each([
+    [0, 5, '12:05 am'], [9, 5, '9:05 am'], [12, 0, '12:00 pm'], [13, 0, '1:00 pm'], [14, 5, '2:05 pm'], [23, 59, '11:59 pm'],
+  ])('%i:%i -> %s (midnight is 12 AM, noon is 12 PM, no leading zero)', (h, m, out) => {
+    expect(t(formatClock(at(h, m), 'en-US'))).toBe(out)
+    expect(t(formatClock(at(h, m), 'en-GB'))).toBe(out) // locales that default to 24-hour still get 12-hour
+  })
+  it('is 12-hour even with the device default locale, and for 24-hour locales like German or French', () => {
+    for (const locale of [undefined, 'de-DE', 'fr-FR', 'ja-JP']) {
+      expect(formatClock(at(14, 5), locale), String(locale)).toMatch(/(am|pm|AM|PM|午後|午前)/)
+      expect(formatClock(at(14, 5), locale)).not.toMatch(/\b14[:.]05\b/)
+    }
+  })
+})
+
 describe('formatListTime', () => {
   it('shows a clock for today (even just after midnight)', () => {
-    expect(formatListTime(new Date(2026, 10, 27, 0, 5), now, 'en-GB')).toBe('00:05')
+    expect(t(formatListTime(new Date(2026, 10, 27, 0, 5), now, 'en-GB'))).toBe('12:05 am')
   })
   it('says Yesterday across midnight, not "24h ago"', () => {
     expect(formatListTime(new Date(2026, 10, 26, 23, 59), now, 'en-GB')).toBe('Yesterday')
