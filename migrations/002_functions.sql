@@ -221,7 +221,9 @@ $$;
 
 -- One row per friend: who they are, the conversation (if any), the latest
 -- message and how many of their messages I haven't read. One round trip.
-create or replace function public.get_chat_list()
+-- (re)created by 004 with more columns; dropping first lets 002 be re-run before 004 without a type clash
+drop function if exists public.get_chat_list();
+create function public.get_chat_list()
 returns table (
   friend_id                uuid,
   friend_email             text,

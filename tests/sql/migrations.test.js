@@ -12,7 +12,7 @@ import path from 'node:path'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const sql = (rel) => readFileSync(path.join(root, rel), 'utf8')
-const MIGRATIONS = ['001_schema', '002_functions', '003_rls_and_storage'].map((n) => `migrations/${n}.sql`)
+const MIGRATIONS = ['001_schema', '002_functions', '003_rls_and_storage', '004_receipts_edit_delete_presence'].map((n) => `migrations/${n}.sql`)
 
 const A = '00000000-0000-0000-0000-00000000000a'
 const B = '00000000-0000-0000-0000-00000000000b'
@@ -218,5 +218,171 @@ describe.each([
     expect(await one('select count(*)::int from storage.objects')).toBe(0)
     await as(B, 'bob@example.com')
     expect(await one('select count(*)::int from storage.objects')).toBe(1)
+  })
+
+  // ---------------------------------------------------------------------------
+  // 004: receipts, edit, delete, last seen
+  // ---------------------------------------------------------------------------
+  describe('receipts, edit, delete and last seen', () => {
+    let ping // id of a fresh message from Alice to Bob
+
+    const receipts = async (id) => (await q('select delivered_at, read_at from messages where id = $1', [id]))[0]
+
+    it('marks a message delivered only for the recipient, and read only when the chat is opened', async () => {
+      await as(A, 'alice@example.com')
+      ping = await one(`insert into messages (conversation_id, sender_id, content) values ($1, auth.uid(), 'ping') returning id`, [conv])
+      expect(await receipts(ping)).toEqual({ delivered_at: null, read_at: null })
+
+      await as(C, 'carol@example.com') // not in the conversation
+      await q('select mark_messages_delivered()')
+      expect(await receipts(ping)).toBeUndefined() // she can't even see it
+      await as(A, 'alice@example.com')
+      await q('select mark_messages_delivered()') // the sender's app opening doesn't deliver her own message
+      expect((await receipts(ping)).delivered_at).toBeNull()
+
+      await as(B, 'bob@example.com')
+      await q('select mark_messages_delivered()')
+      const afterDelivery = await receipts(ping)
+      expect(afterDelivery.delivered_at).not.toBeNull()
+      expect(afterDelivery.read_at).toBeNull() // delivered is not read
+
+      await q('select mark_conversation_read($1)', [conv])
+      const afterRead = await receipts(ping)
+      expect(afterRead.read_at).not.toBeNull()
+
+      // opening the chat again must not move the timestamps ("message info" has to stay truthful)
+      await q('select mark_conversation_read($1)', [conv])
+      await q('select mark_messages_delivered()')
+      expect(await receipts(ping)).toEqual(afterRead)
+
+      // the sender can see both times
+      await as(A, 'alice@example.com')
+      expect(await receipts(ping)).toEqual(afterRead)
+    })
+
+    it('reading an undelivered message also delivers it', async () => {
+      await as(A, 'alice@example.com')
+      const id = await one(`insert into messages (conversation_id, sender_id, content) values ($1, auth.uid(), 'quick read') returning id`, [conv])
+      await as(B, 'bob@example.com')
+      await q('select mark_conversation_read($1)', [conv])
+      const r = await receipts(id)
+      expect(r.delivered_at).not.toBeNull()
+      expect(r.read_at).not.toBeNull()
+    })
+
+    it("lets nobody forge receipts, timestamps or edit flags on insert, or touch them afterwards", async () => {
+      await as(A, 'alice@example.com')
+      for (const col of ['read_at', 'delivered_at', 'created_at', 'edited_at', 'deleted_at']) {
+        await denied(`insert into messages (conversation_id, sender_id, content, ${col}) values ($1, auth.uid(), 'forged', now())`, [conv])
+      }
+      await denied(`update messages set read_at = now() where id = $1`, [ping])
+      await as(B, 'bob@example.com')
+      await denied(`update messages set read_at = null where id = $1`, [ping])
+    })
+
+    it('edits your own recent text message and records that it was edited', async () => {
+      await as(A, 'alice@example.com')
+      const [m] = await q('select * from edit_message($1, $2)', [ping, '  ping!  '])
+      expect(m).toMatchObject({ content: 'ping!', id: ping })
+      expect(m.edited_at).not.toBeNull()
+      expect(await receipts(ping)).toMatchObject({ delivered_at: expect.anything(), read_at: expect.anything() }) // receipts survive edits
+
+      const firstEdit = m.edited_at
+      await sleep(8)
+      const [same] = await q('select * from edit_message($1, $2)', [ping, 'ping!'])
+      expect(same.edited_at).toEqual(firstEdit) // saving without a change isn't an "edit"
+
+      await as(B, 'bob@example.com')
+      expect(await one('select content from messages where id = $1', [ping])).toBe('ping!')
+    })
+
+    it("refuses edits that aren't yours, aren't text, are blank/too long, or are too old", async () => {
+      await as(B, 'bob@example.com')
+      await denied('select * from edit_message($1, $2)', [ping, "bob's edit"]) // someone else's message
+
+      await as(A, 'alice@example.com')
+      const imageId = await one(`select id from messages where media_type = 'image' and conversation_id = $1`, [conv])
+      await denied('select * from edit_message($1, $2)', [imageId, 'caption'])
+      await denied('select * from edit_message($1, $2)', [ping, '   '])
+      await denied('select * from edit_message($1, $2)', [ping, 'x'.repeat(4001)])
+
+      await admin()
+      await q(`update messages set created_at = now() - interval '16 minutes' where id = $1`, [ping])
+      await as(A, 'alice@example.com')
+      await expect(db.query('select * from edit_message($1, $2)', [ping, 'too late'])).rejects.toThrow(/edit_window_passed/)
+      expect(await one('select content from messages where id = $1', [ping])).toBe('ping!')
+
+      await admin()
+      await q(`update messages set created_at = now() - interval '14 minutes' where id = $1`, [ping])
+      await as(A, 'alice@example.com')
+      expect(await one('select content from edit_message($1, $2)', [ping, 'just in time'])).toBe('just in time')
+    })
+
+    it('deletes for everyone: clears content and media, keeps the row, returns the file to remove', async () => {
+      await as(B, 'bob@example.com')
+      const imageId = await one(`select id from messages where media_type = 'image' and conversation_id = $1`, [conv])
+      await denied('select delete_message($1)', [imageId]) // not Bob's to delete
+
+      await as(A, 'alice@example.com')
+      expect(await one('select delete_message($1)', [imageId])).toBe(`${conv}/a.jpg`)
+      expect(await one('select delete_message($1)', [imageId])).toBeNull() // second time: nothing to remove
+
+      await as(B, 'bob@example.com')
+      const [row] = await q('select content, media_path, media_mime, media_width, deleted_at, media_type from messages where id = $1', [imageId])
+      expect(row).toMatchObject({ content: null, media_path: null, media_mime: null, media_width: null, media_type: 'image' })
+      expect(row.deleted_at).not.toBeNull()
+
+      await as(A, 'alice@example.com')
+      await denied('select * from edit_message($1, $2)', [imageId, 'resurrect'])
+      expect(await one('select count(*)::int from messages where id = $1', [imageId])).toBe(1)
+    })
+
+    it('shows a deleted last message in the chat list without leaking its text, and never counts it as unread', async () => {
+      await as(A, 'alice@example.com')
+      const id = await one(`insert into messages (conversation_id, sender_id, content) values ($1, auth.uid(), 'oops wrong chat') returning id`, [conv])
+      await as(B, 'bob@example.com')
+      expect(await one(`select unread_count from get_chat_list() where friend_email = 'alice@example.com'`)).toBeGreaterThan(0)
+      await as(A, 'alice@example.com')
+      await q('select delete_message($1)', [id])
+      await as(B, 'bob@example.com')
+      const [row] = await q(`select * from get_chat_list() where friend_email = 'alice@example.com'`)
+      expect(row).toMatchObject({ last_message_id: id, last_message_deleted: true, last_message_content: null })
+      await q('select mark_conversation_read($1)', [conv])
+      expect(await one(`select unread_count from get_chat_list() where friend_email = 'alice@example.com'`)).toBe(0)
+    })
+
+    it('shares last seen with friends only, and does not write it more than every 20 seconds', async () => {
+      await as(A, 'alice@example.com')
+      await q('select touch_last_seen()')
+      await as(B, 'bob@example.com')
+      const seen = await one(`select friend_last_seen_at from get_chat_list() where friend_email = 'alice@example.com'`)
+      expect(seen).not.toBeNull()
+
+      await as(A, 'alice@example.com')
+      await q('select touch_last_seen()')
+      await as(B, 'bob@example.com')
+      expect(await one(`select friend_last_seen_at from get_chat_list() where friend_email = 'alice@example.com'`)).toEqual(seen) // throttled
+
+      await as(C, 'carol@example.com') // Alice's friend, but not Bob's
+      expect(await one(`select count(*)::int from get_chat_list() where friend_email = 'bob@example.com'`)).toBe(0)
+      await denied('select last_seen_at from profiles where id = $1', [A]).catch(async () => {})
+      expect(await one('select count(*)::int from profiles where id = $1', [A])).toBe(0) // RLS: other people's profiles are invisible
+    })
+
+    it('anonymous visitors can call none of the new functions', async () => {
+      await anon()
+      for (const fn of ['mark_messages_delivered()', 'touch_last_seen()', `edit_message('${ping}', 'x')`, `delete_message('${ping}')`]) {
+        await denied(`select ${fn}`)
+      }
+    })
+
+    it('lets only the uploader delete a chat file', async () => {
+      await as(B, 'bob@example.com') // recipient, in the conversation, but not the uploader
+      expect((await db.query('delete from storage.objects')).affectedRows).toBe(0)
+      await as(C, 'carol@example.com')
+      expect((await db.query('delete from storage.objects')).affectedRows).toBe(0)
+      await as(A, 'alice@example.com')
+      expect((await db.query('delete from storage.objects')).affectedRows).toBe(1)
+    })
   })
 })

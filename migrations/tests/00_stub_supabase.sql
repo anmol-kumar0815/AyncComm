@@ -26,7 +26,7 @@ create table if not exists storage.buckets (
 );
 create table if not exists storage.objects (
   id uuid primary key default gen_random_uuid(),
-  bucket_id text references storage.buckets(id), name text, owner uuid
+  bucket_id text references storage.buckets(id), name text, owner uuid, owner_id text
 );
 alter table storage.objects enable row level security;
 create or replace function storage.foldername(name text) returns text[] language sql immutable as
@@ -39,7 +39,7 @@ do $$ begin
 end $$;
 
 grant usage on schema auth, storage, public to anon, authenticated, service_role;
-grant select, insert on storage.objects to authenticated;
+grant select, insert, delete on storage.objects to authenticated;
 grant select on storage.buckets to authenticated;
 -- Supabase default privileges: new public tables are open to the API roles
 -- (RLS and our REVOKEs are what actually protect them).

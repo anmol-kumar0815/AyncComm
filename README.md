@@ -18,7 +18,8 @@ Then, once per Supabase project, in **Dashboard -> SQL Editor** run, in order:
 1. `migrations/001_schema.sql`
 2. `migrations/002_functions.sql`
 3. `migrations/003_rls_and_storage.sql`
-4. `seed.sql` (development only: creates `dev_user@`, `alice@`, `bob@example.com`, password `password123`)
+4. `migrations/004_receipts_edit_delete_presence.sql`
+5. `seed.sql` (development only: creates `dev_user@`, `alice@`, `bob@example.com`, password `password123`)
 
 (Details and what each file does: [`migrations/README.md`](migrations/README.md). They are idempotent and
 upgrade an existing project in place.)

@@ -1,7 +1,7 @@
 # Database migrations
 
 Supabase has no CLI wired into this repo, so migrations are plain SQL you paste
-into **Supabase Dashboard -> SQL Editor** (or `psql`). Run them **in order**.
+into **Supabase Dashboard -> SQL Editor** (or `psql`). Run them **in order**, and always run *all* of them: later files redefine some functions from earlier ones, so re-running only `002` after `004` would revert part of `004`.
 Every file is idempotent: running one twice is harmless, and they upgrade an
 existing project in place (no data is dropped).
 
@@ -10,6 +10,7 @@ existing project in place (no data is dropped).
 | `001_schema.sql` | Tables (if missing), chat media columns on `messages`, `last_read_at` for unread counts, constraints, indexes, profile-on-signup trigger, realtime publication |
 | `002_functions.sql` | RPCs the app calls: `email_has_password`, `send_friend_request`, `accept_friend_request`, `decline_friend_request`, `get_pending_requests`, `get_or_create_conversation`, `mark_conversation_read`, `get_chat_list` |
 | `003_rls_and_storage.sql` | Turns **Row Level Security on** for every table, with policies; creates the private `chat-media` storage bucket and its access policies |
+| `004_receipts_edit_delete_presence.sql` | Delivered/read timestamps per message, `edit_message` (15-minute window) and `delete_message` (tombstone), `last_seen_at`, richer `get_chat_list`, storage delete policy. Also stops clients forging receipts/timestamps on insert |
 | `add_has_password.sql` | Older one-off; already covered by `001`. Safe to skip |
 
 Dev data: run `seed.sql` (repo root) after the migrations to create the
