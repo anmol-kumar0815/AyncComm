@@ -94,6 +94,25 @@ describe('deleted messages in lists', () => {
   })
 })
 
+describe('friendlyError for unknown problems', () => {
+  it('keeps the friendly sentence but shows what the server said, so it can be diagnosed', () => {
+    const text = friendlyError({ code: 'unexpected_failure', message: 'Database error saving new user' })
+    expect(text).toMatch(/^Something went wrong\. Please try again\./)
+    expect(text).toContain('unexpected_failure: Database error saving new user')
+  })
+  it('works with only a message, or nothing', () => {
+    expect(friendlyError({ message: 'boom' })).toContain('(boom)')
+    expect(friendlyError({})).toBe('Something went wrong. Please try again.')
+    expect(friendlyError(null)).toBe('Something went wrong. Please try again.')
+  })
+  it('caps very long server messages', () => {
+    expect(friendlyError({ message: 'x'.repeat(1000) }).length).toBeLessThan(300)
+  })
+  it('does not add detail to errors we already explain', () => {
+    expect(friendlyError({ code: 'invalid_credentials', message: 'Invalid login credentials' })).toBe("That email and password don't match.")
+  })
+})
+
 describe('friendlyError for existing accounts', () => {
   it('tells someone signing up with a taken email to sign in instead', () => {
     expect(friendlyError({ code: 'user_already_exists', message: 'User already registered' })).toMatch(/already exists.*sign in/i)

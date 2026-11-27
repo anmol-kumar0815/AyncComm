@@ -27,7 +27,13 @@ export function friendlyError(error, fallback = 'Something went wrong. Please tr
     return "Can't reach the server. Check your connection and try again."
   }
   if (code === '42501' || code === 'PGRST301' || /jwt|not authenticated/i.test(msg)) return 'Your session has expired. Please sign in again.'
-  return fallback
+  // Unknown problem: say what the server said, so it can be diagnosed instead of guessed at.
+  return withDetail(fallback, code, msg)
+}
+
+function withDetail(fallback, code, msg) {
+  const detail = [code, msg].filter(Boolean).join(': ').slice(0, 200)
+  return detail ? `${fallback} (${detail})` : fallback
 }
 
 
