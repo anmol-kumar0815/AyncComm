@@ -94,6 +94,13 @@ describe('deleted messages in lists', () => {
   })
 })
 
+describe('friendlyError for closed signups', () => {
+  it('explains that the app is invite-only instead of a vague failure', () => {
+    expect(friendlyError({ code: 'signup_disabled', message: 'Signups not allowed for this instance' })).toMatch(/invite-only/)
+    expect(friendlyError({ message: 'Signups not allowed for otp' })).toMatch(/invite-only/)
+  })
+})
+
 describe('friendlyError for message functions', () => {
   it.each([
     ['edit_window_passed', /15 minutes/],

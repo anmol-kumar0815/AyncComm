@@ -10,6 +10,9 @@ export function friendlyError(error, fallback = 'Something went wrong. Please tr
   if (/invalid_content/.test(msg)) return 'A message must be between 1 and 4000 characters.'
   const code = error.code || error.error_code || ''
 
+  if (code === 'signup_disabled' || /signups? not allowed/i.test(msg)) {
+    return 'This app is invite-only. Ask the person who runs it to create your account.'
+  }
   if (code === 'invalid_credentials' || /invalid login credentials/i.test(msg)) return "That email and password don't match."
   if (code === 'over_email_send_rate_limit' || code === 'over_request_rate_limit' || /rate limit|too many/i.test(msg)) {
     return 'Too many attempts. Please wait a minute and try again.'
