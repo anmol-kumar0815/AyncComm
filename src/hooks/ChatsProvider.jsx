@@ -11,6 +11,8 @@ export function ChatsProvider({ userId, children }) {
   const [status, setStatus] = useState('loading') // loading | ready | error
   const [error, setError] = useState(null)
   const activeConversation = useRef(null)
+  const chatsRef = useRef([]) // latest list, for realtime handlers that must not close over stale state
+  useEffect(() => { chatsRef.current = chats })
   const refreshTimer = useRef(null)
 
   const refresh = useCallback(async () => {
@@ -39,17 +41,16 @@ export function ChatsProvider({ userId, children }) {
     const channel = supabase
       .channel(`inbox:${userId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, ({ new: m }) => {
+        // Decide *outside* the state updater: React runs updaters lazily, so a flag set inside one
+        // can't be read right after setChats().
+        if (!chatsRef.current.some((c) => c.conversationId === m.conversation_id)) {
+          refreshSoon() // first message in a conversation we haven't seen yet
+          return
+        }
         const visible = document.visibilityState === 'visible'
-        let unknown = false
-        setChats((prev) => {
-          const next = applyIncomingMessage(prev, m, {
-            userId,
-            isActiveAndVisible: visible && activeConversation.current === m.conversation_id,
-          })
-          unknown = next === null
-          return next ?? prev
-        })
-        if (unknown) refreshSoon() // first message in a brand-new conversation
+        setChats((prev) =>
+          applyIncomingMessage(prev, m, { userId, isActiveAndVisible: visible && activeConversation.current === m.conversation_id }) ?? prev,
+        )
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'friend_requests' }, refreshSoon)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'friends' }, refreshSoon)
@@ -75,24 +76,30 @@ export function ChatsProvider({ userId, children }) {
     document.title = totalUnread > 0 ? `(${totalUnread}) AsyncComm` : 'AsyncComm'
   }, [totalUnread])
 
+  // Stable identities: components list these in effect dependencies, and a new function
+  // on every chat update would make those effects re-run (and e.g. re-open a conversation).
+  const setActiveConversation = useCallback((id) => { activeConversation.current = id }, [])
+  const markReadLocal = useCallback((conversationId) => {
+    setChats((prev) => prev.map((c) => (c.conversationId === conversationId && c.unread ? { ...c, unread: 0 } : c)))
+  }, [])
+  const setConversationId = useCallback((friendId, conversationId) => {
+    setChats((prev) => prev.map((c) => (c.friendId === friendId && !c.conversationId ? { ...c, conversationId } : c)))
+  }, [])
+  const acceptRequest = useCallback(async (req) => {
+    setRequests((r) => r.filter((x) => x.id !== req.id)) // optimistic
+    try { await acceptFriendRequest(req.id) } finally { refresh() }
+  }, [refresh])
+  const declineRequest = useCallback(async (req) => {
+    setRequests((r) => r.filter((x) => x.id !== req.id))
+    try { await declineFriendRequest(req.id) } finally { refresh() }
+  }, [refresh])
+
   const value = useMemo(
     () => ({
       chats, requests, status, error, totalUnread, refresh,
-      setActiveConversation: (id) => { activeConversation.current = id },
-      markReadLocal: (conversationId) =>
-        setChats((prev) => prev.map((c) => (c.conversationId === conversationId && c.unread ? { ...c, unread: 0 } : c))),
-      setConversationId: (friendId, conversationId) =>
-        setChats((prev) => prev.map((c) => (c.friendId === friendId && !c.conversationId ? { ...c, conversationId } : c))),
-      async acceptRequest(req) {
-        setRequests((r) => r.filter((x) => x.id !== req.id)) // optimistic
-        try { await acceptFriendRequest(req.id) } finally { refresh() }
-      },
-      async declineRequest(req) {
-        setRequests((r) => r.filter((x) => x.id !== req.id))
-        try { await declineFriendRequest(req.id) } finally { refresh() }
-      },
+      setActiveConversation, markReadLocal, setConversationId, acceptRequest, declineRequest,
     }),
-    [chats, requests, status, error, totalUnread, refresh],
+    [chats, requests, status, error, totalUnread, refresh, setActiveConversation, markReadLocal, setConversationId, acceptRequest, declineRequest],
   )
 
   return <ChatsContext.Provider value={value}>{children}</ChatsContext.Provider>
