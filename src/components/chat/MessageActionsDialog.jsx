@@ -8,22 +8,24 @@ import { formatDateTime, messagePreview } from '../../lib/format'
 import { canDelete, canEdit, editMinutesLeft } from '../../lib/receipts'
 
 /**
- * Options for one of my messages: info (sent / delivered / read times), edit, delete.
+ * Options for a message: info (mine: sent / delivered / read times), edit (mine, recent),
+ * and delete. Delete asks which kind: for everyone (mine only) or just for me (any message).
  * Mounted only while open, so it always starts on the menu. It receives the *live* message,
  * so the info view updates in place if the recipient reads it while you're looking.
  */
-export default function MessageActionsDialog({ message, meId, friendName, onClose, onEdit, onDelete }) {
+export default function MessageActionsDialog({ message, meId, friendName, onClose, onEdit, onDeleteForEveryone, onDeleteForMe }) {
   const [view, setView] = useState('menu') // menu | info | confirm
   const [busy, setBusy] = useState(false)
+  if (!message) return null
+
+  const mine = message.sender_id === meId
+  const deleted = Boolean(message.deleted_at)
   const editable = canEdit(message, meId)
-  const deletable = canDelete(message, meId)
+  const everyone = canDelete(message, meId) // can I remove it for them too?
 
-  // The message can disappear under us (deleted from another tab): nothing left to act on.
-  if (!message || (!editable && !deletable && view === 'menu' && message.deleted_at)) return null
-
-  const confirmDelete = async () => {
+  const run = async (fn) => {
     setBusy(true)
-    try { await onDelete(message.id) } finally { setBusy(false); onClose() }
+    try { await fn(message.id) } finally { setBusy(false); onClose() }
   }
 
   const title = view === 'info' ? 'Message info' : view === 'confirm' ? 'Delete message?' : 'Message options'
@@ -37,12 +39,12 @@ export default function MessageActionsDialog({ message, meId, friendName, onClos
       )}
 
       <blockquote className="mb-4 line-clamp-3 rounded-xl bg-gray-100 px-3 py-2 text-sm text-gray-700 [overflow-wrap:anywhere]">
-        {messagePreview({ type: message.media_type, content: message.content, durationMs: message.media_duration_ms, deleted: Boolean(message.deleted_at) })}
+        {messagePreview({ type: message.media_type, content: message.content, durationMs: message.media_duration_ms, deleted })}
       </blockquote>
 
       {view === 'menu' && (
         <ul className="-mx-2 space-y-0.5">
-          <li><Row icon={Info} onClick={() => setView('info')}>Message info</Row></li>
+          {mine && !deleted && <li><Row icon={Info} onClick={() => setView('info')}>Message info</Row></li>}
           {editable && (
             <li>
               <Row icon={Pencil} onClick={() => { onEdit(message.id); onClose() }} hint={`${editMinutesLeft(message)} min left`}>
@@ -50,7 +52,7 @@ export default function MessageActionsDialog({ message, meId, friendName, onClos
               </Row>
             </li>
           )}
-          {deletable && <li><Row icon={Trash2} danger onClick={() => setView('confirm')}>Delete for everyone</Row></li>}
+          <li><Row icon={Trash2} danger onClick={() => setView('confirm')}>Delete</Row></li>
         </ul>
       )}
 
@@ -66,13 +68,20 @@ export default function MessageActionsDialog({ message, meId, friendName, onClos
       {view === 'confirm' && (
         <div className="space-y-4">
           <p className="text-[15px] text-gray-700">
-            This removes the message for everyone, including {friendName}. They'll see “This message was deleted”. You can't undo this.
+            {everyone
+              ? `“Delete for everyone” removes it for you and ${friendName}: they'll see “This message was deleted”. “Delete for me” only removes it from your chat; ${friendName} keeps it.`
+              : `This removes it from your chat only. ${friendName} keeps ${mine ? 'it' : 'their copy'}.`}
           </p>
-          <div className="flex gap-2">
-            <Button variant="outline" className="flex-1" disabled={busy} onClick={() => setView('menu')}>Cancel</Button>
-            <Button variant="destructive" className="flex-1" disabled={busy} onClick={confirmDelete}>
-              {busy ? <Spinner className="text-white" /> : 'Delete'}
+          <div className="flex flex-col gap-2">
+            {everyone && (
+              <Button variant="destructive" disabled={busy} onClick={() => run(onDeleteForEveryone)}>
+                {busy ? <Spinner className="text-white" /> : 'Delete for everyone'}
+              </Button>
+            )}
+            <Button variant={everyone ? 'outline' : 'destructive'} disabled={busy} onClick={() => run(onDeleteForMe)}>
+              Delete for me
             </Button>
+            <Button variant="ghost" disabled={busy} onClick={() => setView('menu')}>Cancel</Button>
           </div>
         </div>
       )}

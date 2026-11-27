@@ -11,8 +11,8 @@ export default function MessageBubble({ message, mine, startsRun, endsRun, onRet
   const big = !deleted && isText && isBigEmoji(message.content)
   const caption = !deleted && !isText && message.content
   const state = receiptState(message)
-  // Options (info / edit / delete) only exist for my own, fully sent, not-yet-deleted messages.
-  const hasActions = mine && !deleted && state !== 'pending' && state !== 'failed' && Boolean(onOpenActions)
+  // Options exist for any message that was actually sent, theirs included ("delete for me"), tombstones too.
+  const hasActions = state !== 'pending' && state !== 'failed' && Boolean(onOpenActions)
 
   const time = (
     <span className={cn('flex items-center gap-1 text-[11px] leading-none', deleted ? 'text-gray-400' : mine && !big ? 'text-blue-100' : 'text-gray-400')}>

@@ -23,6 +23,10 @@ export function canEdit(m, meId, now = Date.now()) {
   return m.sender_id === meId && isSettled(m) && m.media_type === 'text' && now - new Date(m.created_at).getTime() < EDIT_WINDOW_MS
 }
 
+/** Delete for me works on any message that has actually been sent (yours, theirs, or a "deleted" tombstone). */
+export const canHide = (m) => !m.pending && !m.failed
+
+/** Delete for everyone: only the sender, and only while it isn't already deleted. */
 export const canDelete = (m, meId) => m.sender_id === meId && isSettled(m)
 
 /** Whole minutes left to edit (at least 1 while editing is still possible), else 0. */

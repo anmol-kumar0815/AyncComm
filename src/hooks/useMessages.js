@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { deleteMessage as deleteMessageApi, editMessage as editMessageApi, fetchMessage, fetchMessages, insertMessage, uploadChatMedia } from '../lib/api/messages'
+import { deleteMessage as deleteMessageApi, editMessage as editMessageApi, fetchMessage, hideMessage as hideMessageApi, fetchMessages, insertMessage, uploadChatMedia } from '../lib/api/messages'
 import { mergeCatchUp, mergeMessages } from '../lib/messages'
 
 const TYPING_TIMEOUT_MS = 5000 // forget "typing…" if we stop hearing from them
@@ -29,7 +29,10 @@ export function useMessages(conversationId, userId) {
   const joined = useRef(false)
   const drafts = useRef(new Map()) // id -> { row, upload? } for retry
   const blobUrls = useRef(new Set())
-  const merge = useCallback((rows) => setMessages((prev) => mergeMessages(prev, rows)), [])
+  // Messages I deleted "for me". Remembered so a late realtime echo or a stale fetch can't bring one back.
+  const hidden = useRef(new Set())
+  const notHidden = useCallback((rows) => rows.filter((r) => !hidden.current.has(r.id)), [])
+  const merge = useCallback((rows) => setMessages((prev) => mergeMessages(prev, notHidden(rows))), [notHidden])
   const shown = useRef([]) // latest rendered list, readable from async callbacks
   useEffect(() => { shown.current = messages })
 
@@ -46,15 +49,16 @@ export function useMessages(conversationId, userId) {
         // Catching up after being away: make sure we don't leave a hole in the history.
         // (functional update so a message queued in the same tick isn't lost; the flag only
         //  depends on confirmed messages, which the snapshot has)
-        setMessages((prev) => mergeCatchUp(prev, rows, more).messages)
-        const { hasMore: gap } = mergeCatchUp(shown.current, rows, more)
+        const fresh = notHidden(rows)
+        setMessages((prev) => mergeCatchUp(prev, fresh, more).messages)
+        const { hasMore: gap } = mergeCatchUp(shown.current, fresh, more)
         if (gap !== null) setHasMore(gap)
       }
     } catch (e) {
       if (initial) { setStatus('error'); setError(e.message) }
       else console.warn('catch-up failed', e)
     }
-  }, [conversationId, merge])
+  }, [conversationId, merge, notHidden])
 
   useEffect(() => {
     loadLatest({ initial: true }) // eslint-disable-line react-hooks/set-state-in-effect -- fetching external data on mount
@@ -80,6 +84,12 @@ export function useMessages(conversationId, userId) {
         clearTimeout(typingTimer.current)
         setFriendTyping(Boolean(payload?.typing))
         if (payload?.typing) typingTimer.current = setTimeout(() => setFriendTyping(false), TYPING_TIMEOUT_MS)
+      })
+      // Deleted-for-me in another tab of this account: drop it here too.
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'message_hidden' }, ({ new: r }) => {
+        if (!shown.current.some((m) => m.id === r.message_id)) return
+        hidden.current.add(r.message_id)
+        setMessages((prev) => prev.filter((m) => m.id !== r.message_id))
       })
       .subscribe((s) => {
         joined.current = s === 'SUBSCRIBED'
@@ -213,11 +223,26 @@ export function useMessages(conversationId, userId) {
     }
   }, [patch, replace])
 
+  // Delete for me: gone at once; if the server refuses, it comes back.
+  const hideMessage = useCallback(async (id) => {
+    const before = shown.current.find((m) => m.id === id)
+    if (!before) return
+    hidden.current.add(id)
+    setMessages((prev) => prev.filter((m) => m.id !== id))
+    try {
+      await hideMessageApi(id)
+    } catch (e) {
+      hidden.current.delete(id)
+      merge([before])
+      throw e
+    }
+  }, [merge])
+
   const retry = useCallback((id) => deliver(id), [deliver])
   const discard = useCallback((id) => {
     drafts.current.delete(id)
     setMessages((prev) => prev.filter((m) => m.id !== id))
   }, [])
 
-  return { messages, status, error, hasMore, loadingMore, loadEarlier, reload: () => loadLatest({ initial: true }), sendText, sendImage, sendAudio, retry, discard, editMessage, deleteMessage, notifyTyping, friendTyping }
+  return { messages, status, error, hasMore, loadingMore, loadEarlier, reload: () => loadLatest({ initial: true }), sendText, sendImage, sendAudio, retry, discard, editMessage, deleteMessage, hideMessage, notifyTyping, friendTyping }
 }

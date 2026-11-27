@@ -67,6 +67,12 @@ export async function editMessage(id, content) {
   return data
 }
 
+/** Delete for me: hide a message (yours or theirs) from my view only. The other person keeps it. */
+export async function hideMessage(id) {
+  const { error } = await supabase.rpc('hide_message', { p_message_id: id })
+  if (error) throw new Error(friendlyError(error, "Couldn't delete the message."))
+}
+
 /** Delete for everyone, then remove the photo/voice file if there was one. */
 export async function deleteMessage(id) {
   const { data: path, error } = await supabase.rpc('delete_message', { p_message_id: id })

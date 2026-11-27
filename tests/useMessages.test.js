@@ -20,13 +20,14 @@ vi.mock('../src/lib/api/messages', () => ({
   fetchMessage: vi.fn(),
   editMessage: vi.fn(),
   deleteMessage: vi.fn(),
+  hideMessage: vi.fn(),
 }))
 
 import { useMessages } from '../src/hooks/useMessages.js'
-import { deleteMessage, editMessage, fetchMessage, fetchMessages, insertMessage, uploadChatMedia } from '../src/lib/api/messages'
+import { deleteMessage, editMessage, hideMessage, fetchMessage, fetchMessages, insertMessage, uploadChatMedia } from '../src/lib/api/messages'
 
 // channel.handlers order is the order useMessages registers them
-const [ON_INSERT, ON_UPDATE, ON_TYPING] = [0, 1, 2]
+const [ON_INSERT, ON_UPDATE, ON_TYPING, ON_HIDDEN] = [0, 1, 2, 3]
 
 const ME = 'me'
 const FRIEND = 'friend'
@@ -265,6 +266,61 @@ describe('editing and deleting my messages', () => {
     await act(async () => { await expect(result.current.deleteMessage('mine')).rejects.toThrow() })
     expect(result.current.messages[0]).toMatchObject({ content: 'original' })
     expect(result.current.messages[0].deleted_at).toBeUndefined()
+  })
+})
+
+describe('delete for me', () => {
+  const two = () => [row('a', { created_at: '2026-01-01T10:00:00Z' }), row('b', { created_at: '2026-01-01T10:01:00Z' })]
+
+  it('removes the message at once and tells the server', async () => {
+    const { result } = await setup(two())
+    hideMessage.mockResolvedValueOnce()
+    await act(async () => { await result.current.hideMessage('a') })
+    expect(result.current.messages.map((m) => m.id)).toEqual(['b'])
+    expect(hideMessage).toHaveBeenCalledWith('a')
+  })
+
+  it('works on my own messages and on tombstones too', async () => {
+    const { result } = await setup([row('mine', { sender_id: ME }), row('gone', { deleted_at: '2026-01-01T10:00:00Z', content: null, created_at: '2026-01-01T10:01:00Z' })])
+    hideMessage.mockResolvedValue()
+    await act(async () => { await result.current.hideMessage('mine'); await result.current.hideMessage('gone') })
+    expect(result.current.messages).toEqual([])
+  })
+
+  it('brings the message back, unchanged, if the server refuses', async () => {
+    const { result } = await setup(two())
+    hideMessage.mockRejectedValueOnce(new Error("Couldn't delete the message."))
+    await act(async () => { await expect(result.current.hideMessage('a')).rejects.toThrow() })
+    expect(result.current.messages.map((m) => m.id)).toEqual(['a', 'b'])
+    // and it is no longer treated as hidden: live updates for it apply again
+    act(() => channel.handlers[ON_UPDATE]({ new: row('a', { content: 'edited', created_at: '2026-01-01T10:00:00Z' }) }))
+    expect(result.current.messages[0].content).toBe('edited')
+  })
+
+  it('does not let a late realtime echo resurrect it', async () => {
+    const { result } = await setup(two())
+    hideMessage.mockResolvedValueOnce()
+    await act(async () => { await result.current.hideMessage('a') })
+    act(() => channel.handlers[ON_UPDATE]({ new: row('a', { read_at: '2026-01-01T10:05:00Z', created_at: '2026-01-01T10:00:00Z' }) }))
+    act(() => channel.handlers[ON_INSERT]({ new: row('a', { created_at: '2026-01-01T10:00:00Z' }) }))
+    expect(result.current.messages.map((m) => m.id)).toEqual(['b'])
+  })
+
+  it('does not let a catch-up fetch after reconnecting bring it back either', async () => {
+    const { result } = await setup(two())
+    hideMessage.mockResolvedValueOnce()
+    await act(async () => { await result.current.hideMessage('a') })
+    fetchMessages.mockResolvedValueOnce({ messages: two(), hasMore: false })
+    await act(async () => { channel.subscribeCb('SUBSCRIBED') })
+    expect(result.current.messages.map((m) => m.id)).toEqual(['b'])
+  })
+
+  it('drops a message hidden from another tab of the same account, and ignores unrelated ones', async () => {
+    const { result } = await setup(two())
+    act(() => channel.handlers[ON_HIDDEN]({ new: { message_id: 'not-in-this-chat', user_id: ME } }))
+    expect(result.current.messages).toHaveLength(2)
+    act(() => channel.handlers[ON_HIDDEN]({ new: { message_id: 'b', user_id: ME } }))
+    expect(result.current.messages.map((m) => m.id)).toEqual(['a'])
   })
 })
 

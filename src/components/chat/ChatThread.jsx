@@ -14,7 +14,7 @@ import { markConversationRead } from '../../lib/api/chats'
 
 /** The open conversation. Remounted (via key) per conversation so all state resets cleanly. */
 export default function ChatThread({ conversationId, meId, friend }) {
-  const { setActiveConversation, markReadLocal } = useChats()
+  const { setActiveConversation, markReadLocal, refresh } = useChats()
   const visible = useIsVisible()
   const m = useMessages(conversationId, meId)
   const toast = useToast()
@@ -50,7 +50,9 @@ export default function ChatThread({ conversationId, meId, friend }) {
     setEditingId(null)
     m.editMessage(id, text).catch((e) => toast.show(e.message))
   }
-  const removeMessage = (id) => m.deleteMessage(id).catch((e) => toast.show(e.message))
+  const removeForEveryone = (id) => m.deleteMessage(id).catch((e) => toast.show(e.message))
+  // The chat-list preview/unread count may have been showing the message we just removed.
+  const removeForMe = (id) => m.hideMessage(id).then(() => refresh()).catch((e) => toast.show(e.message))
 
   const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files')
   const dropHandlers = {
@@ -124,7 +126,8 @@ export default function ChatThread({ conversationId, meId, friend }) {
           friendName={friend.name}
           onClose={() => setActionsId(null)}
           onEdit={setEditingId}
-          onDelete={removeMessage}
+          onDeleteForEveryone={removeForEveryone}
+          onDeleteForMe={removeForMe}
         />
       )}
     </div>

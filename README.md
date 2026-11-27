@@ -76,9 +76,13 @@ builds for real and fails if any seeded credential appears in the production bun
 - **Ticks:** one grey tick = sent, two grey = delivered (their app received it), two green = read (they opened
   the chat while the tab was visible). Tap the small arrow beside any of your messages -> **Message info** for the
   exact sent / delivered / read times.
-- **Edit / delete:** the same arrow offers **Edit** (text only, within 15 minutes; enforced by the database) and
-  **Delete for everyone** (asks first). Deleted messages stay as "This message was deleted" and their photo or voice
-  file is removed from storage. Edited messages are marked "edited".
+- **Edit / delete:** the same arrow (it also appears on the other person's messages) offers **Edit** (your own text,
+  within 15 minutes; enforced by the database) and **Delete**, which asks which kind:
+  - **Delete for everyone** (your own messages): it becomes "This message was deleted" for both of you and its photo
+    or voice file is removed from storage.
+  - **Delete for me** (any message, including the other person's and "deleted" placeholders): it disappears from your
+    chat only; the other person keeps it. It stays gone after reloading and on your other tabs/devices.
+  Edited messages are marked "edited".
 - **Status line** under the name: `typing…`, `online`, or `last seen today at 14:05`. A green dot marks online friends.
 
 ### Privacy notes
@@ -131,6 +135,7 @@ Storage). Use the checklist below after setting up a project.
 - [ ] Message info shows plausible sent / delivered / read times and updates while open.
 - [ ] Edit a message: other side sees the new text and "edited" without reloading; after 15 minutes Edit is gone (and a stale tab's attempt is refused).
 - [ ] Delete a text, a photo and a voice note: other side sees the tombstone; the file is gone from the `chat-media` bucket.
+- [ ] Delete for me (yours and theirs): gone for you, still there for the other person; reload and a second tab of the same account agree; the chat-list preview and unread badge don't show it.
 - [ ] Status line: `typing…` appears while the other person types and disappears when they stop or send; `online` while their tab is in front; switching tabs shows `last seen` shortly after.
 
 ## Project layout

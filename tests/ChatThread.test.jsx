@@ -22,14 +22,15 @@ const msg = (id, over = {}) => ({
 const friend = { friendId: 'f1', name: 'Alice', email: 'a@x.co', lastSeenAt: null, unread: 0 }
 
 let m
+let ctx
 function mount(messages, over = {}) {
   m = {
     messages, status: 'ready', error: '', hasMore: false, loadingMore: false, loadEarlier: vi.fn(), reload: vi.fn(),
     sendText: vi.fn(), sendImage: vi.fn(), sendAudio: vi.fn(), retry: vi.fn(), discard: vi.fn(),
-    editMessage: vi.fn(async () => {}), deleteMessage: vi.fn(async () => {}), notifyTyping: vi.fn(), friendTyping: false, ...over,
+    editMessage: vi.fn(async () => {}), deleteMessage: vi.fn(async () => {}), hideMessage: vi.fn(async () => {}), notifyTyping: vi.fn(), friendTyping: false, ...over,
   }
   hook.value = m
-  const ctx = { setActiveConversation: vi.fn(), markReadLocal: vi.fn(), onlineIds: new Set(), wentOffline: {} }
+  ctx = { setActiveConversation: vi.fn(), markReadLocal: vi.fn(), refresh: vi.fn(), onlineIds: new Set(), wentOffline: {} }
   const ui = () => (
     <MemoryRouter>
       <ToastProvider>
@@ -81,15 +82,16 @@ describe('edit flow', () => {
   })
 })
 
-describe('delete flow', () => {
-  it('options -> Delete -> confirm deletes exactly that message', async () => {
+describe('delete for everyone', () => {
+  it('options -> Delete -> Delete for everyone deletes exactly that message', async () => {
     const u = userEvent.setup()
     mount([msg('a'), msg('b')])
     await openOptions(u, 'text a')
-    await u.click(screen.getByRole('button', { name: /Delete for everyone/ }))
     await u.click(screen.getByRole('button', { name: 'Delete' }))
+    await u.click(screen.getByRole('button', { name: 'Delete for everyone' }))
     expect(m.deleteMessage).toHaveBeenCalledWith('a')
     expect(m.deleteMessage).toHaveBeenCalledTimes(1)
+    expect(m.hideMessage).not.toHaveBeenCalled()
     await waitFor(() => expect(screen.queryByRole('dialog', { hidden: true })).not.toBeInTheDocument())
   })
 
@@ -97,15 +99,57 @@ describe('delete flow', () => {
     const u = userEvent.setup()
     mount([msg('a')], { deleteMessage: vi.fn(async () => { throw new Error("Couldn't delete the message.") }) })
     await openOptions(u, 'text a')
-    await u.click(screen.getByRole('button', { name: /Delete for everyone/ }))
     await u.click(screen.getByRole('button', { name: 'Delete' }))
+    await u.click(screen.getByRole('button', { name: 'Delete for everyone' }))
     expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't delete")
   })
 
-  it('shows the tombstone once the message is deleted, and offers no options for it', () => {
+  it('shows the tombstone once the message is deleted', () => {
     mount([msg('a', { deleted_at: new Date().toISOString(), content: null })])
     expect(screen.getByText('This message was deleted')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Message options' })).not.toBeInTheDocument()
+  })
+})
+
+describe('delete for me', () => {
+  it('hides only that message through the hook, then refreshes the chat list preview', async () => {
+    const u = userEvent.setup()
+    mount([msg('a'), msg('b')])
+    await openOptions(u, 'text b')
+    await u.click(screen.getByRole('button', { name: 'Delete' }))
+    await u.click(screen.getByRole('button', { name: 'Delete for me' }))
+    expect(m.hideMessage).toHaveBeenCalledWith('b')
+    expect(m.deleteMessage).not.toHaveBeenCalled() // the other person is untouched
+    await waitFor(() => expect(ctx.refresh).toHaveBeenCalled())
+  })
+
+  it("works on the other person's messages, which have no 'for everyone' choice", async () => {
+    const u = userEvent.setup()
+    mount([msg('t', { sender_id: 'f1', content: 'from Alice' })])
+    await openOptions(u, 'from Alice')
+    expect(screen.queryByRole('button', { name: /Message info/ })).not.toBeInTheDocument()
+    await u.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(screen.queryByRole('button', { name: 'Delete for everyone' })).not.toBeInTheDocument()
+    await u.click(screen.getByRole('button', { name: 'Delete for me' }))
+    expect(m.hideMessage).toHaveBeenCalledWith('t')
+  })
+
+  it('tells the user if it failed (and does not refresh the list as if it had worked)', async () => {
+    const u = userEvent.setup()
+    mount([msg('a')], { hideMessage: vi.fn(async () => { throw new Error("Couldn't delete the message.") }) })
+    await openOptions(u, 'text a')
+    await u.click(screen.getByRole('button', { name: 'Delete' }))
+    await u.click(screen.getByRole('button', { name: 'Delete for me' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't delete")
+    expect(ctx.refresh).not.toHaveBeenCalled()
+  })
+
+  it('a tombstone can be removed from my chat', async () => {
+    const u = userEvent.setup()
+    mount([msg('a', { deleted_at: new Date().toISOString(), content: null })])
+    await u.click(screen.getByRole('button', { name: 'Message options' }))
+    await u.click(screen.getByRole('button', { name: 'Delete' }))
+    await u.click(screen.getByRole('button', { name: 'Delete for me' }))
+    expect(m.hideMessage).toHaveBeenCalledWith('a')
   })
 })
 
