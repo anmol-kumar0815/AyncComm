@@ -21,9 +21,11 @@ export async function fetchChatList() {
           senderId: r.last_message_sender_id,
           durationMs: r.last_message_duration_ms,
           at: r.last_message_at,
+          deleted: Boolean(r.last_message_deleted),
         }
       : null,
     unread: r.unread_count ?? 0,
+    lastSeenAt: r.friend_last_seen_at ?? null,
   }))
 }
 
@@ -36,4 +38,16 @@ export async function getOrCreateConversation(friendId) {
 export async function markConversationRead(conversationId) {
   const { error } = await supabase.rpc('mark_conversation_read', { p_conversation_id: conversationId })
   if (error) console.warn('mark read failed', error)
+}
+
+/** "My app is open and has your messages": gives the senders their second tick. */
+export async function markMessagesDelivered() {
+  const { error } = await supabase.rpc('mark_messages_delivered')
+  if (error) console.warn('mark delivered failed', error)
+}
+
+/** Heartbeat for "last seen" (the server throttles writes). */
+export async function touchLastSeen() {
+  const { error } = await supabase.rpc('touch_last_seen')
+  if (error) console.warn('last seen failed', error)
 }

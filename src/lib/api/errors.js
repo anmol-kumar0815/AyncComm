@@ -2,6 +2,12 @@
 export function friendlyError(error, fallback = 'Something went wrong. Please try again.') {
   if (!error) return fallback
   const msg = String(error.message || '')
+
+  // codes raised by the database functions (migration 004)
+  if (/edit_window_passed/.test(msg)) return 'You can only edit a message within 15 minutes of sending it.'
+  if (/not_editable/.test(msg)) return "This message can't be edited."
+  if (/message_not_found/.test(msg)) return 'That message no longer exists.'
+  if (/invalid_content/.test(msg)) return 'A message must be between 1 and 4000 characters.'
   const code = error.code || error.error_code || ''
 
   if (code === 'invalid_credentials' || /invalid login credentials/i.test(msg)) return "That email and password don't match."

@@ -80,9 +80,34 @@ export const isBigEmoji = (text) => {
   return n >= 1 && n <= 3
 }
 
+/** "Yesterday at 14:05" - used where an exact moment matters (message info). */
+export function formatDateTime(date, now = new Date(), locale) {
+  return `${formatDayLabel(date, now, locale)} at ${formatClock(date, locale)}`
+}
+
+/** "last seen today at 14:05" / "last seen yesterday at ..." / "last seen Tue at ..." / "last seen 01/11/2026". Empty if unknown. */
+export function formatLastSeen(date, now = new Date(), locale) {
+  if (!date) return ''
+  const d = new Date(date)
+  const diff = dayDiff(d, now)
+  const clock = formatClock(d, locale)
+  if (diff <= 0) return `last seen today at ${clock}`
+  if (diff === 1) return `last seen yesterday at ${clock}`
+  if (diff < 7) return `last seen ${d.toLocaleDateString(locale, { weekday: 'short' })} at ${clock}`
+  return `last seen ${d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit', year: 'numeric' })}`
+}
+
+/** Header subtitle: typing beats online beats last seen. tone drives the colour. */
+export function presenceLabel({ typing, online, lastSeenAt }, now = new Date(), locale) {
+  if (typing) return { text: 'typing…', tone: 'typing' }
+  if (online) return { text: 'online', tone: 'online' }
+  return { text: formatLastSeen(lastSeenAt, now, locale), tone: 'muted' }
+}
+
 /** One-line summary of a message for the chat list. */
 export function messagePreview(m) {
   if (!m) return ''
+  if (m.deleted) return '🚫 This message was deleted'
   if (m.type === 'image') return m.content ? `📷 ${m.content}` : '📷 Photo'
   if (m.type === 'audio') return `🎤 Voice message${m.durationMs ? ` (${formatDuration(m.durationMs)})` : ''}`
   return m.content || ''

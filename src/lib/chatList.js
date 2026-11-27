@@ -25,9 +25,23 @@ export function applyIncomingMessage(chats, m, { userId, isActiveAndVisible }) {
     ...chat,
     last: {
       id: m.id, type: m.media_type, content: m.content, senderId: m.sender_id,
-      durationMs: m.media_duration_ms, at: m.created_at,
+      durationMs: m.media_duration_ms, at: m.created_at, deleted: Boolean(m.deleted_at),
     },
     unread: mine || isActiveAndVisible ? chat.unread : chat.unread + 1,
   }
   return sortChats(chats.map((c, idx) => (idx === i ? next : c)))
+}
+
+/**
+ * A message changed (edited, deleted, or just got a receipt). Only the chat-list preview
+ * cares, and only if it's the latest message of a chat. Returns the same array when
+ * nothing visible changed so React can skip re-rendering.
+ */
+export function applyMessageUpdate(chats, m) {
+  const i = chats.findIndex((c) => c.last?.id === m.id)
+  if (i < 0) return chats
+  const last = chats[i].last
+  const deleted = Boolean(m.deleted_at)
+  if (last.deleted === deleted && last.content === m.content) return chats
+  return chats.map((c, idx) => (idx === i ? { ...c, last: { ...last, content: m.content, deleted } } : c))
 }
