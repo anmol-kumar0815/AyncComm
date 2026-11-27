@@ -1,6 +1,7 @@
 import { BrowserRouter } from 'react-router-dom'
 import { MessageCircle } from 'lucide-react'
 import AuthScreen from './components/auth/AuthScreen'
+import LockGate from './components/auth/LockGate'
 import MainLayout from './components/MainLayout'
 import { Button } from './components/ui/button'
 import { Spinner } from './components/ui/spinner'
@@ -57,9 +58,11 @@ function AuthGate() {
       )
     default:
       return (
-        <ChatsProvider userId={auth.user.id}>
-          <MainLayout user={auth.user} profile={auth.profile} onProfileChanged={auth.refreshProfile} />
-        </ChatsProvider>
+        <LockGate key={auth.user.id} user={auth.user}>
+          <ChatsProvider userId={auth.user.id}>
+            <MainLayout user={auth.user} profile={auth.profile} onProfileChanged={auth.refreshProfile} />
+          </ChatsProvider>
+        </LockGate>
       )
   }
 }

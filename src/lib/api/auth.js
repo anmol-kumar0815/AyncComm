@@ -1,5 +1,6 @@
 import { supabase } from '../supabase'
 import { friendlyError } from './errors'
+import { clearUnlocked, markUnlocked } from '../appLock'
 
 /** Does this email already have a password? false means "new here": show the create-account form. */
 export async function emailHasPassword(email) {
@@ -8,9 +9,14 @@ export async function emailHasPassword(email) {
   return Boolean(data)
 }
 
+/**
+ * Check the password and start a session. Typing the right password also unlocks the app lock for this
+ * tab, so signing in never asks twice (and the lock screen can reuse this to verify the password).
+ */
 export async function signInWithPassword(email, password) {
-  const { error } = await supabase.auth.signInWithPassword({ email, password })
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) throw new Error(friendlyError(error))
+  if (data?.user?.id) markUnlocked(data.user.id)
 }
 
 /**
@@ -31,9 +37,11 @@ export async function signUpWithPassword({ email, password, name }) {
         'Ask the person who runs the app to turn off "Confirm email" in Supabase, then sign in.',
     )
   }
+  if (data.user?.id) markUnlocked(data.user.id)
 }
 
 export async function signOut() {
+  clearUnlocked()
   // dev only: don't auto-login again straight after an intentional log out
   if (import.meta.env.DEV) (await import('../devLogin')).rememberDevLogout()
   await supabase.auth.signOut()

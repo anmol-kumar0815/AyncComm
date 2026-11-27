@@ -3,6 +3,7 @@
 // import.meta.env.DEV, which Vite replaces with `false` in production builds,
 // so this code (and the seeded credentials) is stripped from the shipped bundle.
 import { supabase } from './supabase'
+import { markUnlocked } from './appLock'
 
 const DEV_PASSWORD = 'password123' // seeded by seed.sql, example.com users only
 const DEV_USERS = {
@@ -42,7 +43,7 @@ export async function maybeDevLogin(session) {
   }
 
   const email = wanted ?? DEV_USERS.dev
-  const { error } = await supabase.auth.signInWithPassword({ email, password: DEV_PASSWORD })
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password: DEV_PASSWORD })
   if (error) {
     console.warn(
       `[dev login] Couldn't sign in as ${email}: ${error.message}\n` +
@@ -51,6 +52,9 @@ export async function maybeDevLogin(session) {
     return false
   }
   sessionStorage.removeItem(OPT_OUT_KEY)
+  // A real sign-in just happened, so don't also show the lock screen. (Re-opening a tab that already
+  // had a session still locks, which is how you test the lock in dev.)
+  if (data?.user?.id) markUnlocked(data.user.id)
   return true
 }
 

@@ -3,9 +3,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const { auth, rpc } = vi.hoisted(() => ({ auth: { signUp: vi.fn(), signInWithPassword: vi.fn() }, rpc: vi.fn() }))
 vi.mock('../src/lib/supabase', () => ({ supabase: { auth, rpc } }))
-import { emailHasPassword, signInWithPassword, signUpWithPassword } from '../src/lib/api/auth.js'
+import { emailHasPassword, signInWithPassword, signOut, signUpWithPassword } from '../src/lib/api/auth.js'
+import { isUnlocked, markUnlocked } from '../src/lib/appLock.js'
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => { vi.clearAllMocks(); sessionStorage.clear() })
 
 describe('signUpWithPassword', () => {
   it('creates the account with a password and sends the name as metadata (the database copies it to the profile)', async () => {
@@ -48,5 +49,29 @@ describe('signInWithPassword / emailHasPassword', () => {
     expect(rpc).toHaveBeenCalledWith('email_has_password', { p_email: 'a@b.co' })
     rpc.mockResolvedValue({ data: null, error: null })
     expect(await emailHasPassword('new@b.co')).toBe(false)
+  })
+})
+
+describe('unlocking the app lock as a side effect of typing the password', () => {
+  it('signing in unlocks this tab for that user, so the lock never asks twice', async () => {
+    auth.signInWithPassword.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null })
+    await signInWithPassword('a@b.co', 'pw')
+    expect(isUnlocked('u1')).toBe(true)
+  })
+  it('a failed sign-in unlocks nothing', async () => {
+    auth.signInWithPassword.mockResolvedValue({ data: {}, error: { code: 'invalid_credentials', message: 'Invalid login credentials' } })
+    await expect(signInWithPassword('a@b.co', 'bad')).rejects.toThrow()
+    expect(isUnlocked('u1')).toBe(false)
+  })
+  it('creating an account unlocks this tab too', async () => {
+    auth.signUp.mockResolvedValue({ data: { session: {}, user: { id: 'u9' } }, error: null })
+    await signUpWithPassword({ email: 'a@b.co', password: 'pw-12345', name: 'A' })
+    expect(isUnlocked('u9')).toBe(true)
+  })
+  it('logging out locks the tab again', async () => {
+    markUnlocked('u1')
+    auth.signOut = vi.fn(async () => {})
+    await signOut()
+    expect(isUnlocked('u1')).toBe(false)
   })
 })
