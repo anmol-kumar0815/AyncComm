@@ -102,9 +102,26 @@ npm test          # all tests (see below)
 npm run lint
 ```
 
-The app uses client-side routing (`/chat/:id`), so a static host must serve `index.html` for unknown paths
-(Netlify: `/* /index.html 200` in `public/_redirects`; Vercel: a rewrite to `/index.html`).
+The app uses client-side routing (`/chat/:id`), so a static host must serve `index.html` for unknown paths.
+This repo ships `public/_redirects` (Netlify, Cloudflare Pages) and `vercel.json` (Vercel) for that; see **Going live** below.
 Voice notes need **HTTPS** (browsers only expose the microphone on secure origins; `localhost` counts).
+
+## Going live
+
+Supabase is the backend only; the built app (`dist/`) goes on any static host.
+
+1. **New Supabase project for production** (keep dev separate). SQL Editor: run `migrations/001`-`005` in order. **Do not run `seed.sql`.**
+2. **Authentication -> URL Configuration:** Site URL = your production URL; add it to Redirect URLs.
+3. **Authentication -> Providers -> Email:** Confirm email **ON**. Set minimum password length to 8.
+4. **Authentication -> SMTP Settings:** configure a real SMTP provider (Resend, Brevo, SendGrid, ...). Supabase's built-in mailer is only for testing and is heavily rate-limited, so sign-in links won't reach users reliably without this.
+5. **Host the frontend** (Vercel / Netlify / Cloudflare Pages): build command `npm run build`, output directory `dist`, environment variables `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from the *production* project (Project Settings -> API). Never set `service_role` anywhere in the frontend, and don't set any `VITE_DEV_*` variables.
+6. Open the live URL and run the manual QA checklist below.
+
+Verify Row Level Security is on for every table (all rows must show `true`):
+
+```sql
+select tablename, rowsecurity from pg_tables where schemaname = 'public' order by 1;
+```
 
 ## Tests
 
