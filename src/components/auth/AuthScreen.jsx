@@ -7,7 +7,8 @@ import { AuthShell, FormError } from './AuthShell'
 import { PasswordField } from './PasswordField'
 import { emailHasPassword, sendMagicLink, sendPasswordReset, signInWithPassword } from '../../lib/api/auth'
 
-const RESEND_SECONDS = 30
+// Supabase allows one auth email per address every 60s by default; unlocking sooner just gets rejected.
+const RESEND_SECONDS = 60
 
 /**
  * Sign-in in as few steps as possible:

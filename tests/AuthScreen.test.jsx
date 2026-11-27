@@ -92,10 +92,10 @@ describe('first-time user', () => {
 
   it('throttles "Resend" with a visible countdown, then allows it', async () => {
     await enterEmail('n@e.co')
-    const resend = await screen.findByRole('button', { name: /Resend link in 30s/ })
+    const resend = await screen.findByRole('button', { name: /Resend link in 60s/ })
     expect(resend).toBeDisabled()
     // tick second by second so React flushes each countdown update, like a real clock
-    for (let i = 0; i < 30; i++) await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+    for (let i = 0; i < 60; i++) await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
     const ready = screen.getByRole('button', { name: 'Resend link' })
     expect(ready).toBeEnabled()
     await user.click(ready)
