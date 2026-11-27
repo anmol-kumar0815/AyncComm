@@ -12,7 +12,7 @@ import path from 'node:path'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const sql = (rel) => readFileSync(path.join(root, rel), 'utf8')
-const MIGRATIONS = ['001_schema', '002_functions', '003_rls_and_storage', '004_receipts_edit_delete_presence'].map((n) => `migrations/${n}.sql`)
+const MIGRATIONS = ['001_schema', '002_functions', '003_rls_and_storage', '004_receipts_edit_delete_presence', '005_delete_for_me'].map((n) => `migrations/${n}.sql`)
 
 const A = '00000000-0000-0000-0000-00000000000a'
 const B = '00000000-0000-0000-0000-00000000000b'
@@ -383,6 +383,97 @@ describe.each([
       expect((await db.query('delete from storage.objects')).affectedRows).toBe(0)
       await as(A, 'alice@example.com')
       expect((await db.query('delete from storage.objects')).affectedRows).toBe(1)
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // 005: delete for me
+  // ---------------------------------------------------------------------------
+  describe('delete for me', () => {
+    let keep, gone, lastOne
+    const send = async (who, text) => {
+      await as(who, who === A ? 'alice@example.com' : 'bob@example.com')
+      const id = await one(`insert into messages (conversation_id, sender_id, content) values ($1, auth.uid(), $2) returning id`, [conv, text])
+      await sleep(8)
+      return id
+    }
+    const visibleTo = async (who, id) => {
+      await as(who, who === A ? 'alice@example.com' : 'bob@example.com')
+      return (await one('select count(*)::int from messages where id = $1', [id])) === 1
+    }
+
+    it("hides a message from the person who hid it, and only from them", async () => {
+      keep = await send(A, 'dfm keep')
+      gone = await send(A, 'dfm hide me')
+
+      await as(B, 'bob@example.com') // Bob hides Alice's message
+      await q('select hide_message($1)', [gone])
+      expect(await visibleTo(B, gone)).toBe(false)
+      expect(await visibleTo(B, keep)).toBe(true)
+      expect(await visibleTo(A, gone)).toBe(true) // Alice still has it
+
+      // ...also for your OWN messages: Alice hides hers; Bob (who never hid it) keeps seeing it
+      await as(A, 'alice@example.com')
+      await q('select hide_message($1)', [keep])
+      expect(await visibleTo(A, keep)).toBe(false)
+      expect(await visibleTo(B, keep)).toBe(true)
+    })
+
+    it('is idempotent and private: nobody can read, add or remove anyone elses hidden rows', async () => {
+      await as(B, 'bob@example.com')
+      await q('select hide_message($1)', [gone]) // again: no error
+      expect(await one('select count(*)::int from message_hidden')).toBe(1) // only his own row
+      await denied(`insert into message_hidden (message_id, user_id) values ($1, $2)`, [keep, A]) // no direct writes
+      await denied('delete from message_hidden')
+      await as(A, 'alice@example.com')
+      expect(await one('select count(*)::int from message_hidden')).toBe(1) // Alice sees only hers (the one she hid), not Bob's
+      expect(await one('select message_id from message_hidden')).toBe(keep)
+    })
+
+    it('only works on messages in your own conversations', async () => {
+      await as(C, 'carol@example.com')
+      await denied('select hide_message($1)', [gone])
+      await denied('select hide_message($1)', ['00000000-0000-0000-0000-0000000000ff'])
+      await anon()
+      await denied('select hide_message($1)', [gone])
+    })
+
+    it('hidden messages are skipped by the chat list: last message and unread count', async () => {
+      lastOne = await send(A, 'dfm newest')
+      await as(B, 'bob@example.com')
+      const before = (await q(`select * from get_chat_list() where friend_email = 'alice@example.com'`))[0]
+      expect(before).toMatchObject({ last_message_id: lastOne })
+      expect(before.unread_count).toBeGreaterThan(0)
+
+      await q('select hide_message($1)', [lastOne])
+      const after = (await q(`select * from get_chat_list() where friend_email = 'alice@example.com'`))[0]
+      expect(after.last_message_id).not.toBe(lastOne) // falls back to the previous visible message
+      expect(after.unread_count).toBe(before.unread_count - 1)
+
+      await as(A, 'alice@example.com') // Alice's own list is unaffected by Bob's hiding
+      expect((await q(`select * from get_chat_list() where friend_email = 'bob@example.com'`))[0].last_message_id).toBe(lastOne)
+    })
+
+    it('works with the other features: deleting for everyone, receipts and tombstones', async () => {
+      // Alice deletes for everyone a message Bob already hid: allowed, nothing breaks
+      await as(A, 'alice@example.com')
+      await q('select delete_message($1)', [gone])
+      await as(B, 'bob@example.com')
+      expect(await visibleTo(B, gone)).toBe(false) // still hidden, not resurrected as a tombstone
+      await q('select mark_conversation_read($1)', [conv]) // read-marking ignores hidden rows without error
+      // hiding a tombstone someone else is still looking at
+      await as(A, 'alice@example.com')
+      expect(await visibleTo(A, gone)).toBe(true)
+      await q('select hide_message($1)', [gone])
+      expect(await visibleTo(A, gone)).toBe(false)
+    })
+
+    it('deleting a message removes its hidden rows with it (no orphans)', async () => {
+      await admin()
+      const id = await one(`insert into messages (conversation_id, sender_id, content) values ($1, $2, 'temp') returning id`, [conv, A])
+      await q('insert into message_hidden (message_id, user_id) values ($1, $2)', [id, B])
+      await q('delete from messages where id = $1', [id])
+      expect(await one('select count(*)::int from message_hidden where message_id = $1', [id])).toBe(0)
     })
   })
 })

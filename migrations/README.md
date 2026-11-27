@@ -11,6 +11,7 @@ existing project in place (no data is dropped).
 | `002_functions.sql` | RPCs the app calls: `email_has_password`, `send_friend_request`, `accept_friend_request`, `decline_friend_request`, `get_pending_requests`, `get_or_create_conversation`, `mark_conversation_read`, `get_chat_list` |
 | `003_rls_and_storage.sql` | Turns **Row Level Security on** for every table, with policies; creates the private `chat-media` storage bucket and its access policies |
 | `004_receipts_edit_delete_presence.sql` | Delivered/read timestamps per message, `edit_message` (15-minute window) and `delete_message` (tombstone), `last_seen_at`, richer `get_chat_list`, storage delete policy. Also stops clients forging receipts/timestamps on insert |
+| `005_delete_for_me.sql` | `message_hidden` + `hide_message`: "delete for me" hides a message from your view only. RLS hides it from every read; `get_chat_list` skips it for the preview and unread count |
 | `add_has_password.sql` | Older one-off; already covered by `001`. Safe to skip |
 
 Dev data: run `seed.sql` (repo root) after the migrations to create the
