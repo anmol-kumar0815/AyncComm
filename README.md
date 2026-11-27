@@ -72,6 +72,21 @@ builds for real and fails if any seeded credential appears in the production bun
 - **Voice notes:** the microphone sits where Send is while the box is empty. Tap, talk, tap send
   (`Esc` cancels). Up to 5 minutes.
 - A message that fails to send stays in the chat with **Retry / Delete**.
+- **Ticks:** one grey tick = sent, two grey = delivered (their app received it), two green = read (they opened
+  the chat while the tab was visible). Tap the small arrow beside any of your messages -> **Message info** for the
+  exact sent / delivered / read times.
+- **Edit / delete:** the same arrow offers **Edit** (text only, within 15 minutes; enforced by the database) and
+  **Delete for everyone** (asks first). Deleted messages stay as "This message was deleted" and their photo or voice
+  file is removed from storage. Edited messages are marked "edited".
+- **Status line** under the name: `typing…`, `online`, or `last seen today at 14:05`. A green dot marks online friends.
+
+### Privacy notes
+
+Read receipts, online status, last seen and typing are always on for friends (there are no toggles yet), and are
+visible **only to friends**: last seen is served by `get_chat_list`, which only returns your friends. *Online* uses one
+Realtime presence channel and *typing* uses the conversation's channel; those channels aren't access-restricted by RLS,
+so someone who guessed a user's or conversation's UUID could observe them. For a small private app that is a low risk;
+if it matters, move them to private channels with Realtime Authorization policies.
 
 ## Commands
 
@@ -111,6 +126,11 @@ Storage). Use the checklist below after setting up a project.
 - [ ] Phone: keyboard doesn't hide the message box; back button returns to the list; emoji panel + keyboard don't stack.
 - [ ] Go offline, send a message (shows Not sent / Retry), go online, Retry works. Reconnect catches up on missed messages.
 - [ ] A third account can't see Alice and Bob's messages or media (RLS/storage).
+- [ ] Ticks: send while the other tab is closed -> one tick; open their app -> two grey; open the chat -> two green, live.
+- [ ] Message info shows plausible sent / delivered / read times and updates while open.
+- [ ] Edit a message: other side sees the new text and "edited" without reloading; after 15 minutes Edit is gone (and a stale tab's attempt is refused).
+- [ ] Delete a text, a photo and a voice note: other side sees the tombstone; the file is gone from the `chat-media` bucket.
+- [ ] Status line: `typing…` appears while the other person types and disappears when they stop or send; `online` while their tab is in front; switching tabs shows `last seen` shortly after.
 
 ## Project layout
 
