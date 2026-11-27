@@ -50,7 +50,7 @@ The session is remembered by the browser, so you stay signed in between visits u
 
 | Do this | To get this |
 | --- | --- |
-| open `/?as=alice` or `/?as=bob` | be that user (use a second browser profile / incognito to chat with yourself) |
+| open `/?as=alice` in one tab and `/?as=bob` in another | be both users at once, side by side, in the **same browser window**. Tabs opened with `?as=` keep their login private to the tab. (Two *incognito windows* do **not** work: they share one session, so logging in as Alice in one logs the other in as Alice too.) |
 | open `/?as=none` | see the real sign-in screen |
 | log out in the app | stay logged out for that tab until you open `/?as=...` or start a new tab |
 | `VITE_DEV_AUTO_LOGIN=false` in `.env.local` | turn auto-login off entirely |

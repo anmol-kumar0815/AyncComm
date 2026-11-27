@@ -34,7 +34,9 @@ export async function maybeDevLogin(session) {
   const wanted = DEV_USERS[as] // undefined when no (or an unknown) ?as=
   if (session) {
     if (!wanted || session.user.email === wanted) return false
-    await supabase.auth.signOut() // ?as=bob while logged in as someone else: switch
+    // ?as=bob while logged in as someone else: switch. 'local' matters: the default scope would
+    // revoke the previous user's sessions on the server, logging them out everywhere.
+    await supabase.auth.signOut({ scope: 'local' })
   } else if (!wanted && sessionStorage.getItem(OPT_OUT_KEY)) {
     return false // you logged out on purpose in this tab; don't fight it
   }
