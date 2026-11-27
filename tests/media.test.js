@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { baseMime, extFromMime, pickRecorderMime, fitWithin, validateImageFile, createUrlCache } from '../src/lib/media.js'
+import { baseMime, extFromMime, pickRecorderMime, fitWithin, displaySize, validateImageFile, createUrlCache } from '../src/lib/media.js'
 
 describe('mime helpers', () => {
   it('strips codec parameters', () => {
@@ -38,6 +38,20 @@ describe('fitWithin', () => {
   })
   it('never produces a zero dimension for extreme panoramas', () => {
     expect(fitWithin(100000, 10, 1600).height).toBeGreaterThanOrEqual(1)
+  })
+})
+
+describe('displaySize', () => {
+  it('fits landscape, portrait and square images in the bubble box', () => {
+    expect(displaySize(1600, 1200)).toEqual({ width: 320, height: 240 })
+    expect(displaySize(1200, 1600)).toEqual({ width: 315, height: 420 })
+    expect(displaySize(1000, 1000)).toEqual({ width: 320, height: 320 })
+  })
+  it('does not upscale small images', () => {
+    expect(displaySize(100, 50)).toEqual({ width: 100, height: 50 })
+  })
+  it('falls back to a sensible box when the size is unknown', () => {
+    expect(displaySize(null, null)).toEqual({ width: 320, height: 240 })
   })
 })
 

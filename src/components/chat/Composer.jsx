@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Send, Smile, Keyboard } from 'lucide-react'
+import { ImagePlus, Send, Smile, Keyboard } from 'lucide-react'
 import { Button } from '../ui/button'
 import { cn } from '../../lib/utils'
 import EmojiPanel from './EmojiPanel'
@@ -9,10 +9,11 @@ const drafts = new Map() // conversationId -> unsent text, so switching chats do
 const MAX_HEIGHT = 140
 const isTouchDevice = () => window.matchMedia?.('(pointer: coarse)').matches
 
-export default function Composer({ conversationId, disabled, onSendText }) {
+export default function Composer({ conversationId, disabled, onSendText, onPickImage }) {
   const [text, setText] = useState(() => drafts.get(conversationId) ?? '')
   const [emojiOpen, setEmojiOpen] = useState(false)
   const areaRef = useRef(null)
+  const fileRef = useRef(null)
   const textRef = useRef(text)
 
   useEffect(() => {
@@ -66,6 +67,18 @@ export default function Composer({ conversationId, disabled, onSendText }) {
     }
   }
 
+  const onFileChosen = (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // allow choosing the same file again later
+    if (file) onPickImage(file)
+  }
+
+  // Pasting a screenshot / copied image straight into the box.
+  const onPaste = (e) => {
+    const file = [...(e.clipboardData?.files ?? [])].find((f) => f.type.startsWith('image/'))
+    if (file) { e.preventDefault(); onPickImage(file) }
+  }
+
   const toggleEmoji = () => {
     setEmojiOpen((open) => {
       // On phones, hide the keyboard while the emoji panel is up; tapping the box brings it back.
@@ -90,6 +103,11 @@ export default function Composer({ conversationId, disabled, onSendText }) {
           {emojiOpen ? <Keyboard className="h-6 w-6" /> : <Smile className="h-6 w-6" />}
         </Button>
 
+        <Button variant="ghost" size="icon" disabled={disabled} onClick={() => fileRef.current?.click()} aria-label="Send a photo" className="text-gray-500">
+          <ImagePlus className="h-6 w-6" />
+        </Button>
+        <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={onFileChosen} />
+
         <textarea
           ref={areaRef}
           value={text}
@@ -97,6 +115,7 @@ export default function Composer({ conversationId, disabled, onSendText }) {
           maxLength={MAX_MESSAGE_LENGTH}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
+          onPaste={onPaste}
           onFocus={() => { if (isTouchDevice()) setEmojiOpen(false) }}
           placeholder="Type a message"
           aria-label="Message"

@@ -34,6 +34,17 @@ export function fitWithin(w, h, max = MAX_IMAGE_SIDE) {
   return { width: Math.max(1, Math.round(w * k)), height: Math.max(1, Math.round(h * k)) }
 }
 
+/**
+ * On-screen size for an image bubble: fits within maxW x maxH, keeps aspect
+ * ratio, never upscales. Reserving this box before the image loads is what
+ * stops the conversation from jumping as photos arrive.
+ */
+export function displaySize(w, h, maxW = 320, maxH = 420) {
+  if (!w || !h) return { width: maxW, height: Math.round(maxW * 0.75) }
+  const k = Math.min(maxW / w, maxH / h, 1)
+  return { width: Math.max(1, Math.round(w * k)), height: Math.max(1, Math.round(h * k)) }
+}
+
 /** Returns an error message, or null if the file is acceptable. */
 export function validateImageFile(file) {
   if (!file) return 'No file selected.'
