@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 
-const channel = { handlers: [], subscribeCb: null }
+const channel = { handlers: [], subscribeCb: null, send: vi.fn() }
 vi.mock('../src/lib/supabase', () => ({
   supabase: {
     channel: vi.fn(() => ({
       on(_type, _filter, cb) { channel.handlers.push(cb); return this },
       subscribe(cb) { channel.subscribeCb = cb; cb('SUBSCRIBED'); return this },
+      send: (...a) => channel.send(...a),
     })),
     removeChannel: vi.fn(),
   },
@@ -17,10 +18,15 @@ vi.mock('../src/lib/api/messages', () => ({
   insertMessage: vi.fn(),
   uploadChatMedia: vi.fn(),
   fetchMessage: vi.fn(),
+  editMessage: vi.fn(),
+  deleteMessage: vi.fn(),
 }))
 
 import { useMessages } from '../src/hooks/useMessages.js'
-import { fetchMessage, fetchMessages, insertMessage, uploadChatMedia } from '../src/lib/api/messages'
+import { deleteMessage, editMessage, fetchMessage, fetchMessages, insertMessage, uploadChatMedia } from '../src/lib/api/messages'
+
+// channel.handlers order is the order useMessages registers them
+const [ON_INSERT, ON_UPDATE, ON_TYPING] = [0, 1, 2]
 
 const ME = 'me'
 const FRIEND = 'friend'
@@ -39,9 +45,11 @@ async function setup(history = [row('h1')]) {
   return hook
 }
 
+afterEach(() => vi.useRealTimers())
 beforeEach(() => {
   vi.clearAllMocks()
   channel.handlers = []
+  channel.send = vi.fn()
   let n = 0
   vi.stubGlobal('crypto', { randomUUID: () => `uuid-${++n}` })
   URL.createObjectURL = vi.fn(() => 'blob:local')
@@ -99,7 +107,7 @@ describe('sending text', () => {
     act(() => { result.current.sendText('hi') })
 
     const server = row('uuid-1', { sender_id: ME, content: 'hi', created_at: '2026-01-01T10:05:00Z' })
-    act(() => { channel.handlers[0]({ new: server }) }) // echo wins the race
+    act(() => { channel.handlers[ON_INSERT]({ new: server }) }) // echo wins the race
     await act(async () => { d.resolve(server) })
 
     expect(result.current.messages.filter((m) => m.id === 'uuid-1')).toHaveLength(1)
@@ -108,7 +116,7 @@ describe('sending text', () => {
 
   it('shows messages from the other person as they arrive', async () => {
     const { result } = await setup()
-    act(() => { channel.handlers[0]({ new: row('in-1', { created_at: '2026-01-01T11:00:00Z' }) }) })
+    act(() => { channel.handlers[ON_INSERT]({ new: row('in-1', { created_at: '2026-01-01T11:00:00Z' }) }) })
     expect(result.current.messages.at(-1).id).toBe('in-1')
   })
 })
@@ -193,6 +201,106 @@ describe('media', () => {
     await act(async () => { result.current.sendImage({ blob: new Blob(['i']), width: 1, height: 1, mime: 'image/jpeg' }) })
     unmount()
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:local')
+  })
+})
+
+describe('receipts arriving live', () => {
+  it('turns a sent message into delivered, then read, as the server updates the row', async () => {
+    const { result } = await setup([row('mine', { sender_id: ME })])
+    expect(result.current.messages[0].delivered_at).toBeUndefined()
+    act(() => channel.handlers[ON_UPDATE]({ new: row('mine', { sender_id: ME, delivered_at: '2026-01-01T10:00:05Z' }) }))
+    expect(result.current.messages[0]).toMatchObject({ delivered_at: '2026-01-01T10:00:05Z' })
+    expect(result.current.messages[0].read_at).toBeUndefined()
+    act(() => channel.handlers[ON_UPDATE]({ new: row('mine', { sender_id: ME, delivered_at: '2026-01-01T10:00:05Z', read_at: '2026-01-01T10:01:00Z' }) }))
+    expect(result.current.messages[0].read_at).toBe('2026-01-01T10:01:00Z')
+    expect(result.current.messages).toHaveLength(1)
+  })
+  it("shows the other person's edit and delete", async () => {
+    const { result } = await setup([row('theirs', { content: 'v1' })])
+    act(() => channel.handlers[ON_UPDATE]({ new: row('theirs', { content: 'v2', edited_at: '2026-01-01T10:02:00Z' }) }))
+    expect(result.current.messages[0]).toMatchObject({ content: 'v2', edited_at: '2026-01-01T10:02:00Z' })
+    act(() => channel.handlers[ON_UPDATE]({ new: row('theirs', { content: null, deleted_at: '2026-01-01T10:03:00Z' }) }))
+    expect(result.current.messages[0]).toMatchObject({ content: null, deleted_at: '2026-01-01T10:03:00Z' })
+  })
+})
+
+describe('editing and deleting my messages', () => {
+  const mine = () => row('mine', { sender_id: ME, content: 'original' })
+
+  it('edit shows the new text immediately, then settles on the server copy', async () => {
+    const { result } = await setup([mine()])
+    let finish
+    editMessage.mockReturnValueOnce(new Promise((r) => { finish = r }))
+    let done
+    act(() => { done = result.current.editMessage('mine', 'fixed') })
+    expect(result.current.messages[0]).toMatchObject({ content: 'fixed' })
+    expect(result.current.messages[0].edited_at).toBeTruthy()
+    await act(async () => { finish(row('mine', { sender_id: ME, content: 'fixed', edited_at: '2026-01-01T10:05:00Z' })); await done })
+    expect(result.current.messages[0]).toMatchObject({ content: 'fixed', edited_at: '2026-01-01T10:05:00Z' })
+    expect(editMessage).toHaveBeenCalledWith('mine', 'fixed')
+  })
+
+  it('puts the old text back and reports why if the server refuses (e.g. window passed)', async () => {
+    const { result } = await setup([mine()])
+    editMessage.mockRejectedValueOnce(new Error('You can only edit a message within 15 minutes of sending it.'))
+    await act(async () => {
+      await expect(result.current.editMessage('mine', 'too late')).rejects.toThrow(/15 minutes/)
+    })
+    expect(result.current.messages[0]).toMatchObject({ content: 'original' })
+    expect(result.current.messages[0].edited_at).toBeUndefined()
+  })
+
+  it('delete turns the bubble into a tombstone at once', async () => {
+    const { result } = await setup([row('mine', { sender_id: ME, media_type: 'image', media_path: 'c/p.jpg', content: 'secret caption' })])
+    deleteMessage.mockResolvedValueOnce()
+    await act(async () => { await result.current.deleteMessage('mine') })
+    expect(result.current.messages[0]).toMatchObject({ content: null, media_path: null })
+    expect(result.current.messages[0].deleted_at).toBeTruthy()
+    expect(deleteMessage).toHaveBeenCalledWith('mine')
+  })
+
+  it('brings the message back if deleting failed', async () => {
+    const { result } = await setup([mine()])
+    deleteMessage.mockRejectedValueOnce(new Error("Couldn't delete the message."))
+    await act(async () => { await expect(result.current.deleteMessage('mine')).rejects.toThrow() })
+    expect(result.current.messages[0]).toMatchObject({ content: 'original' })
+    expect(result.current.messages[0].deleted_at).toBeUndefined()
+  })
+})
+
+describe('typing', () => {
+  it('shows "typing" when the friend broadcasts it and clears it when they stop', async () => {
+    const { result } = await setup()
+    act(() => channel.handlers[ON_TYPING]({ payload: { userId: FRIEND, typing: true } }))
+    expect(result.current.friendTyping).toBe(true)
+    act(() => channel.handlers[ON_TYPING]({ payload: { userId: FRIEND, typing: false } }))
+    expect(result.current.friendTyping).toBe(false)
+  })
+  it('gives up on a stale "typing" (their tab closed mid-sentence)', async () => {
+    const { result } = await setup() // (real timers while loading; waitFor needs them)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    act(() => channel.handlers[ON_TYPING]({ payload: { userId: FRIEND, typing: true } }))
+    expect(result.current.friendTyping).toBe(true)
+    act(() => { vi.advanceTimersByTime(4900) })
+    expect(result.current.friendTyping).toBe(true)
+    act(() => { vi.advanceTimersByTime(200) })
+    expect(result.current.friendTyping).toBe(false)
+  })
+  it('stops showing it when their message actually arrives', async () => {
+    const { result } = await setup()
+    act(() => channel.handlers[ON_TYPING]({ payload: { userId: FRIEND, typing: true } }))
+    act(() => channel.handlers[ON_INSERT]({ new: row('hi', { created_at: '2026-01-01T11:00:00Z' }) }))
+    expect(result.current.friendTyping).toBe(false)
+  })
+  it('ignores my own echo', async () => {
+    const { result } = await setup()
+    act(() => channel.handlers[ON_TYPING]({ payload: { userId: ME, typing: true } }))
+    expect(result.current.friendTyping).toBe(false)
+  })
+  it('broadcasts my typing on the conversation channel', async () => {
+    const { result } = await setup()
+    act(() => result.current.notifyTyping(true))
+    expect(channel.send).toHaveBeenCalledWith({ type: 'broadcast', event: 'typing', payload: { userId: ME, typing: true } })
   })
 })
 
