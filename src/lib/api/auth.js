@@ -47,7 +47,11 @@ export async function completeAccount({ userId, password, name }) {
   if (dbError) throw new Error(friendlyError(dbError, "Your password was saved but we couldn't finish setting up. Please try again."))
 }
 
-export const signOut = () => supabase.auth.signOut()
+export async function signOut() {
+  // dev only: don't auto-login again straight after an intentional log out
+  if (import.meta.env.DEV) (await import('../devLogin')).rememberDevLogout()
+  await supabase.auth.signOut()
+}
 
 export async function fetchProfile(userId) {
   const { data, error } = await supabase

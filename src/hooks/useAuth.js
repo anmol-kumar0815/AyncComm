@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { fetchProfile } from '../lib/api/auth'
-import { maybeDevLogin } from '../lib/devLogin'
 
 /**
  * status:
@@ -32,7 +31,12 @@ export function useAuth() {
     ;(async () => {
       const { data } = await supabase.auth.getSession()
       if (data.session) setSession(data.session)
-      await maybeDevLogin(data.session)
+      // Dev-only shortcut. The literal `import.meta.env.DEV` lets the bundler delete this
+      // branch (and the dev module with its seeded credentials) from production builds.
+      if (import.meta.env.DEV) {
+        const { maybeDevLogin } = await import('../lib/devLogin')
+        await maybeDevLogin(data.session)
+      }
       if (active) setBooted(true)
     })()
     return () => { active = false; subscription.unsubscribe() }
