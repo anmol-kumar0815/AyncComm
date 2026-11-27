@@ -97,6 +97,16 @@ builds for real and fails if any seeded credential appears in the production bun
   Edited messages are marked "edited".
 - **Status line** under the name: `typing…`, `online`, or `last seen today at 14:05`. A green dot marks online friends.
 
+### App lock (optional)
+
+**Settings -> Security -> "Ask for my password when I open the app".** Normally the browser keeps you signed in, so reopening the
+tab goes straight to your chats. With the lock on, a new tab or window shows a lock screen and asks for your **password only**
+(no email) before anything loads: no chats, no live connection, and you don't appear online. A reload of the same tab doesn't
+re-lock; closing the tab does. Turning the lock on or off asks for your password, and logging out is always available on the lock screen.
+
+It is **per device** (turn it on in each browser you use), and it is a gate in the app, not encryption: the browser still holds your
+login, so it keeps out someone who casually opens your browser, not someone with developer tools. For stronger protection, log out.
+
 ### Privacy notes
 
 Read receipts, online status, last seen and typing are always on for friends (there are no toggles yet), and are
@@ -153,6 +163,7 @@ Storage). Use the checklist below after setting up a project.
 - [ ] Sign up with a new email (name + password): you land in Chats straight away, no email. Reload: still signed in.
 - [ ] Log out, log back in with the password. A wrong password shows an error. Signing up again with the same email says the account exists.
 - [ ] Reset a password with the SQL in *Sign-in flow* and sign in with the new one.
+- [ ] App lock: turn it on in Settings (asks for the password); reload the tab (no prompt); close the tab and reopen the site (lock screen, password only); wrong password shows an error; the right one opens your chats; turning it off asks for the password.
 - [ ] Two browsers (`/?as=alice`, `/?as=bob` in incognito): messages appear live both ways; unread badge and tab title update; opening the chat clears them.
 - [ ] Send a photo (picker, paste, drag-drop): preview -> appears instantly -> still there after reload. Tap it for the viewer.
 - [ ] Voice note in Chrome **and Safari**: record, send, plays on the other side, seek and 1.5x work, mic indicator turns off afterwards. Deny mic permission: you get a clear message.
